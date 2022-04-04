@@ -73,19 +73,15 @@ public class ImplementMapRule extends PlannerRule<SelectExpression> {
             return;
         }
 
-
-
         final GroupExpressionRef<? extends RecordQueryPlan> referenceOverPlans = GroupExpressionRef.from(innerPlans);
         final var flowedValueType = innerQuantifier.getFlowedObjectType();
-        if (resultValue.getResultType().equals(flowedValueType)) {
-            call.yield(referenceOverPlans); // 1-1 mapping, no need for MapPlan
-        }
 
         call.yield(GroupExpressionRef.of(
                 new RecordQueryMapPlan(
                         Quantifier.physicalBuilder()
                                 .morphFrom(innerQuantifier)
                                 .build(referenceOverPlans),
-                        resultValue)));
+                        resultValue,
+                        flowedValueType.equals(resultValue))));
     }
 }

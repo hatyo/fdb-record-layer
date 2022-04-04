@@ -63,10 +63,14 @@ public class RecordQueryMapPlan implements RecordQueryPlanWithChild, RelationalE
     @Nonnull
     private final Value resultValue;
 
+    private final boolean passThrough;
+
     public RecordQueryMapPlan(@Nonnull Quantifier.Physical inner,
-                              @Nonnull Value resultValue) {
+                              @Nonnull Value resultValue,
+                              boolean passThrough) {
         this.inner = inner;
         this.resultValue = resultValue;
+        this.passThrough = passThrough;
     }
 
     @Nonnull
@@ -75,13 +79,18 @@ public class RecordQueryMapPlan implements RecordQueryPlanWithChild, RelationalE
                                                                      @Nonnull final EvaluationContext context,
                                                                      @Nullable final byte[] continuation,
                                                                      @Nonnull final ExecuteProperties executeProperties) {
-        return getChild().executePlan(store, context, continuation, executeProperties)
-                .map(innerResult -> {
-                    final EvaluationContext nestedContext = context.withBinding(inner.getAlias(), innerResult.getObject());
-                    // Apply (map) each value to the incoming record
-                    return resultValue.eval(store, nestedContext, null, null);
-                })
-                .map(QueryResult::of);
+        if (passThrough) {
+            return getChild().executePlan(store, context, continuation, executeProperties);
+        } else {
+            return getChild().executePlan(store, context, continuation, executeProperties)
+                    .map(innerResult -> {
+                        final EvaluationContext nestedContext = context.withBinding(inner.getAlias(), innerResult.getObject());
+                        // Apply (map) each value to the incoming record
+                        return resultValue.eval(store, nestedContext, null, null);
+                    })
+                    .map(QueryResult::of);
+        }
+
     }
 
     @Override
@@ -92,7 +101,7 @@ public class RecordQueryMapPlan implements RecordQueryPlanWithChild, RelationalE
     @Nonnull
     @Override
     public RecordQueryPlanWithChild withChild(@Nonnull final RecordQueryPlan child) {
-        return new RecordQueryMapPlan(Quantifier.physical(GroupExpressionRef.of(child), inner.getAlias()), resultValue);
+        return new RecordQueryMapPlan(Quantifier.physical(GroupExpressionRef.of(child), inner.getAlias()), resultValue, passThrough);
     }
 
     @Nonnull
@@ -106,7 +115,8 @@ public class RecordQueryMapPlan implements RecordQueryPlanWithChild, RelationalE
     public RecordQueryMapPlan rebaseWithRebasedQuantifiers(@Nonnull final AliasMap translationMap, @Nonnull final List<Quantifier> rebasedQuantifiers) {
         Verify.verify(rebasedQuantifiers.size() == 1);
         final Value rebasedResultValues = resultValue.rebase(translationMap);
-        return new RecordQueryMapPlan(Iterables.getOnlyElement(rebasedQuantifiers).narrow(Quantifier.Physical.class), rebasedResultValues);
+        return new RecordQueryMapPlan(Iterables.getOnlyElement(rebasedQuantifiers).narrow(Quantifier.Physical.class), rebasedResultValues,
+                resultValue.equals(rebasedQuantifiers.get(0).getFlowedObjectValue().getResultType()));
     }
 
     @Override
