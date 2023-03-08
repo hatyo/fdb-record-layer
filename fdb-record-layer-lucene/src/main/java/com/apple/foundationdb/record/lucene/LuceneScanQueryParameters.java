@@ -43,6 +43,7 @@ import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Scan parameters for making a {@link LuceneScanQuery}.
@@ -107,7 +108,7 @@ public class LuceneScanQueryParameters extends LuceneScanParameters {
     @Nonnull
     @Override
     public LuceneScanQuery bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, @Nonnull EvaluationContext context) {
-        return new LuceneScanQuery(scanType, getGroupKey(store, context), query.bind(store, index, context),
+        return new LuceneScanQuery(scanType, getGroupKey(store, context), query.bind(store, index, storedFields == null ? Set.of() : storedFields.stream().filter(Objects::nonNull).collect(Collectors.toSet()), context),
                 sort, storedFields, storedFieldTypes, luceneQueryHighlightParameters);
     }
 

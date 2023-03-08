@@ -45,6 +45,7 @@ import org.apache.lucene.util.BytesRef;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Utility class for Encapsulating Test Functionality.
@@ -87,7 +88,7 @@ public class FDBLuceneTestIndex {
      * @throws IOException IOException from Directory layer
      */
     public List<Document> searchIndex(String inField, String queryString) throws ParseException, IOException {
-        Query query = new QueryParser(inField, analyzer).parse(queryString);
+        Query query = new QueryParser(inField, analyzer, Set.of()).parse(queryString);
         try (IndexReader indexReader = DirectoryReader.open(directory)) {
             IndexSearcher searcher = new LuceneOptimizedIndexSearcher(indexReader);
             TopDocs topDocs = searcher.search(query, 10);

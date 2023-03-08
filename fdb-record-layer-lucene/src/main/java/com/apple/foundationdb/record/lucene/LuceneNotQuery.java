@@ -37,6 +37,7 @@ import javax.annotation.Nonnull;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -65,18 +66,18 @@ public class LuceneNotQuery extends LuceneBooleanQuery {
     }
 
     @Override
-    public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, @Nonnull EvaluationContext context) {
+    public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, final Set<String> storedFields, @Nonnull EvaluationContext context) {
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         if (getChildren().isEmpty()) {
             // Lucene cannot handle all negated clauses.
             builder.add(new MatchAllDocsQuery(), BooleanClause.Occur.MUST);
         } else {
             for (LuceneQueryClause child : getChildren()) {
-                builder.add(child.bind(store, index, context), BooleanClause.Occur.MUST);
+                builder.add(child.bind(store, index, storedFields, context), BooleanClause.Occur.MUST);
             }
         }
         for (LuceneQueryClause child : negatedChildren) {
-            builder.add(child.bind(store, index, context), BooleanClause.Occur.MUST_NOT);
+            builder.add(child.bind(store, index, storedFields, context), BooleanClause.Occur.MUST_NOT);
         }
         return builder.build();
     }

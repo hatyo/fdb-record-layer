@@ -29,14 +29,16 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.spans.SpanNearQuery;
 import org.apache.lucene.search.spans.SpanQuery;
 
+import java.util.Set;
+
 /**
  * Optimized {@link QueryParser} that adds the slop for {@link SpanNearQuery} as well.
  * So the proximity search based on {@link SpanNearQuery} can also work.
  */
 public class LuceneOptimizedQueryParser extends QueryParser {
 
-    public LuceneOptimizedQueryParser(String field, Analyzer analyzer) {
-        super(field, analyzer);
+    public LuceneOptimizedQueryParser(String field, Analyzer analyzer, Set<String> storedFields) {
+        super(field, analyzer, storedFields);
     }
 
     @Override

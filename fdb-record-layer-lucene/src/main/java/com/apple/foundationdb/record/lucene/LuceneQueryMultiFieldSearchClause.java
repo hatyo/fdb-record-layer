@@ -39,6 +39,7 @@ import javax.annotation.Nonnull;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Query clause from string using Lucene search syntax.
@@ -65,7 +66,7 @@ public class LuceneQueryMultiFieldSearchClause extends LuceneQueryClause {
     }
 
     @Override
-    public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, @Nonnull EvaluationContext context) {
+    public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, final Set<String> storedFields, @Nonnull EvaluationContext context) {
         final LuceneAnalyzerCombinationProvider analyzerSelector = LuceneAnalyzerRegistryImpl.instance().getLuceneAnalyzerCombinationProvider(index, LuceneAnalyzerType.FULL_TEXT);
         final String[] fieldNames = LuceneScanParameters.indexTextFields(index, store.getRecordMetaData()).toArray(new String[0]);
         final String searchString = isParameter ? (String)context.getBinding(search) : search;

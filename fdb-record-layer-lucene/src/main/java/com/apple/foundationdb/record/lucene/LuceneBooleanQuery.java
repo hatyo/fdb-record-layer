@@ -35,6 +35,7 @@ import org.apache.lucene.search.Query;
 import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -63,10 +64,10 @@ public class LuceneBooleanQuery extends LuceneQueryClause {
     }
 
     @Override
-    public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, @Nonnull EvaluationContext context) {
+    public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, final Set<String> storedFields, @Nonnull EvaluationContext context) {
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (LuceneQueryClause child : children) {
-            builder.add(child.bind(store, index, context), occur);
+            builder.add(child.bind(store, index, storedFields, context), occur);
         }
         return builder.build();
     }

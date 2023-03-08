@@ -47,6 +47,7 @@ import org.apache.lucene.search.TermRangeQuery;
 
 import javax.annotation.Nonnull;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Query clause using a {@link Comparisons.Comparison} against a document field.
@@ -192,7 +193,7 @@ public abstract class LuceneQueryFieldComparisonClause extends LuceneQueryClause
         }
 
         @Override
-        public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, @Nonnull EvaluationContext context) {
+        public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, final Set<String> storedFields, @Nonnull EvaluationContext context) {
             Query allValues = new TermRangeQuery(field, null, null, true, true);
             if (comparison.getType() == Comparisons.Type.NOT_NULL) {
                 return allValues;
@@ -210,7 +211,7 @@ public abstract class LuceneQueryFieldComparisonClause extends LuceneQueryClause
 
         @Override
         @SuppressWarnings("unchecked")
-        public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, @Nonnull EvaluationContext context) {
+        public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, final Set<String> storedFields, @Nonnull EvaluationContext context) {
             Object comparand = comparison.getComparand(store, context);
             if (comparand == null) {
                 return new MatchNoDocsQuery();
@@ -239,7 +240,7 @@ public abstract class LuceneQueryFieldComparisonClause extends LuceneQueryClause
                     // PhraseQuery will require tokenizing, so may as well just use parser.
                     try {
                         final LuceneAnalyzerCombinationProvider analyzerSelector = LuceneAnalyzerRegistryImpl.instance().getLuceneAnalyzerCombinationProvider(index, LuceneAnalyzerType.FULL_TEXT);
-                        final QueryParser parser = new QueryParser(field, analyzerSelector.provideQueryAnalyzer((String) comparand).getAnalyzer());
+                        final QueryParser parser = new QueryParser(field, analyzerSelector.provideQueryAnalyzer((String) comparand).getAnalyzer(), storedFields);
                         return parser.parse("\"" + comparand + "\"");
                     } catch (Exception ex) {
                         throw new RecordCoreArgumentException("Unable to parse phrase for query", ex);
@@ -286,7 +287,7 @@ public abstract class LuceneQueryFieldComparisonClause extends LuceneQueryClause
 
         @Override
         @SuppressWarnings("unchecked")
-        public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, @Nonnull EvaluationContext context) {
+        public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, final Set<String> storedFields, @Nonnull EvaluationContext context) {
             Object comparand = comparison.getComparand(store, context);
             if (comparand == null) {
                 return new MatchNoDocsQuery();
@@ -324,7 +325,7 @@ public abstract class LuceneQueryFieldComparisonClause extends LuceneQueryClause
 
         @Override
         @SuppressWarnings("unchecked")
-        public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, @Nonnull EvaluationContext context) {
+        public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, final Set<String> storedFields, @Nonnull EvaluationContext context) {
             Object comparand = comparison.getComparand(store, context);
             if (comparand == null) {
                 return new MatchNoDocsQuery();
@@ -362,7 +363,7 @@ public abstract class LuceneQueryFieldComparisonClause extends LuceneQueryClause
 
         @Override
         @SuppressWarnings("unchecked")
-        public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, @Nonnull EvaluationContext context) {
+        public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, final Set<String> storedFields, @Nonnull EvaluationContext context) {
             Object comparand = comparison.getComparand(store, context);
             if (comparand == null) {
                 return new MatchNoDocsQuery();

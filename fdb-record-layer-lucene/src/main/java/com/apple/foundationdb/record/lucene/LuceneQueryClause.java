@@ -31,13 +31,14 @@ import com.google.common.collect.ImmutableMap;
 import org.apache.lucene.search.Query;
 
 import javax.annotation.Nonnull;
+import java.util.Set;
 
 /**
  * Binder for a single query clause.
  */
 @API(API.Status.UNSTABLE)
 public abstract class LuceneQueryClause implements PlanHashable {
-    public abstract Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, @Nonnull EvaluationContext context);
+    public abstract Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, final Set<String> storedFields, @Nonnull EvaluationContext context);
 
     public abstract void getPlannerGraphDetails(@Nonnull ImmutableList.Builder<String> detailsBuilder, @Nonnull ImmutableMap.Builder<String, Attribute> attributeMapBuilder);
 }

@@ -365,6 +365,15 @@ public class LuceneIndexTest extends FDBRecordStoreTestBase {
         return scan.bind(recordStore, index, EvaluationContext.EMPTY);
     }
 
+    private LuceneScanBounds fullTextSearch2(Index index, String search, boolean highlight) {
+        LuceneScanParameters scan = new LuceneScanQueryParameters(
+                ScanComparisons.EMPTY,
+                new LuceneQuerySearchClause(search, false),
+                null, null, null,
+                highlight ? new LuceneScanQueryParameters.LuceneQueryHighlightParameters(-1) : null );
+        return scan.bind(recordStore, index, EvaluationContext.EMPTY);
+    }
+
     private LuceneScanBounds specificFieldSearch(Index index, String search, String field) {
         LuceneScanParameters scan = new LuceneScanQueryParameters(
                 ScanComparisons.EMPTY,
@@ -554,6 +563,24 @@ public class LuceneIndexTest extends FDBRecordStoreTestBase {
 
             assertIndexEntryPrimaryKeys(List.of(1623L),
                     recordStore.scanIndex(TEXT_AND_NUMBER_INDEX, fullTextSearch(TEXT_AND_NUMBER_INDEX, "\"propose a Vision\" AND group:[2 TO 4]"), null, ScanProperties.FORWARD_SCAN));
+            assertEquals(1, getCounter(context, FDBStoreTimer.Counts.LOAD_SCAN_ENTRY).getCount());
+
+            assertEntriesAndSegmentInfoStoredInCompoundFile(recordStore.indexSubspace(TEXT_AND_NUMBER_INDEX), context, "_0.cfs", true);
+        }
+    }
+
+    @Test
+    void searchTextQueryWithNumberRangeWithSingleRange() {
+        /*
+         * Check that a range query on a number type and a text match together return the correct result
+         */
+        try (FDBRecordContext context = openContext()) {
+            rebuildIndexMetaData(context, SIMPLE_DOC, TEXT_AND_NUMBER_INDEX);
+            recordStore.saveRecord(createSimpleDocument(1623L, ENGINEER_JOKE, 2));
+            recordStore.saveRecord(createSimpleDocument(1547L, ENGINEER_JOKE, 1));
+
+            assertIndexEntryPrimaryKeys(List.of(1623L),
+                    recordStore.scanIndex(TEXT_AND_NUMBER_INDEX, fullTextSearch2(TEXT_AND_NUMBER_INDEX, "group:[2 TO 4]", false), null, ScanProperties.FORWARD_SCAN));
             assertEquals(1, getCounter(context, FDBStoreTimer.Counts.LOAD_SCAN_ENTRY).getCount());
 
             assertEntriesAndSegmentInfoStoredInCompoundFile(recordStore.indexSubspace(TEXT_AND_NUMBER_INDEX), context, "_0.cfs", true);

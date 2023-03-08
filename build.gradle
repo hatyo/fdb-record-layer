@@ -67,6 +67,7 @@ allprojects {
         options.encoding = "utf-8"
     }
     project.tasks.withType(Javadoc) {
+        enabled = false
         options.encoding = "utf-8"
     }
     project.tasks.withType(Test) {

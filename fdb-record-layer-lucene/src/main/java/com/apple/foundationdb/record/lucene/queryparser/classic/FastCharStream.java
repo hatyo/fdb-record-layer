@@ -25,6 +25,7 @@ import java.io.Reader;
  * character position of the token in the input, as required by Lucene's {@link
  * org.apache.lucene.analysis.tokenattributes.OffsetAttribute} API.
  * */
+@SuppressWarnings({"unchecked", "deprecation"})
 public final class FastCharStream implements CharStream {
     char[] buffer = null;
 

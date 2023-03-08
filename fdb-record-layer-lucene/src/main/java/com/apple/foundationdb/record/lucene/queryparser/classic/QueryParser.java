@@ -92,9 +92,9 @@ public class QueryParser extends QueryParserBase implements QueryParserConstants
    *  @param f  the default field for query terms.
    *  @param a   used to find terms in the query text.
    */
-   public QueryParser(String f, Analyzer a) {
+   public QueryParser(String f, Analyzer a, Set<String> storedFields) {
     this(new FastCharStream(new StringReader("")));
-    init(f, a);
+    init(f, a, storedFields);
   }
 
   /**

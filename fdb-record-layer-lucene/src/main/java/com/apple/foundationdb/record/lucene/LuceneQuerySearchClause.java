@@ -34,6 +34,7 @@ import com.google.common.collect.ImmutableMap;
 import org.apache.lucene.search.Query;
 
 import javax.annotation.Nonnull;
+import java.util.Set;
 
 /**
  * Query clause from string using Lucene search syntax.
@@ -72,10 +73,10 @@ public class LuceneQuerySearchClause extends LuceneQueryClause {
     }
 
     @Override
-    public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, @Nonnull EvaluationContext context) {
+    public Query bind(@Nonnull FDBRecordStoreBase<?> store, @Nonnull Index index, final Set<String> storedFields, @Nonnull EvaluationContext context) {
         final LuceneAnalyzerCombinationProvider analyzerSelector = LuceneAnalyzerRegistryImpl.instance().getLuceneAnalyzerCombinationProvider(index, LuceneAnalyzerType.FULL_TEXT);
         final String searchString = isParameter ? (String)context.getBinding(search) : search;
-        final QueryParser parser = new LuceneOptimizedQueryParser(defaultField, analyzerSelector.provideQueryAnalyzer(searchString).getAnalyzer());
+        final QueryParser parser = new LuceneOptimizedQueryParser(defaultField, analyzerSelector.provideQueryAnalyzer(searchString).getAnalyzer(), storedFields);
         try {
             return parser.parse(searchString);
         } catch (Exception ioe) {

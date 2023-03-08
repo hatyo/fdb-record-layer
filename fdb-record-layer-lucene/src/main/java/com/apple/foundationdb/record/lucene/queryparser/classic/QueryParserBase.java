@@ -19,6 +19,7 @@ package com.apple.foundationdb.record.lucene.queryparser.classic;
 
 import static org.apache.lucene.util.automaton.Operations.DEFAULT_DETERMINIZE_WORK_LIMIT;
 
+import java.io.IOException;
 import java.io.StringReader;
 import java.text.DateFormat;
 import java.util.Calendar;
@@ -27,11 +28,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.google.common.collect.ImmutableSet;
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.util.CharTokenizer;
 import org.apache.lucene.document.DateTools;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.flexible.standard.CommonQueryParserConfiguration;
@@ -105,10 +110,24 @@ public abstract class QueryParserBase extends QueryBuilder implements CommonQuer
 
     boolean autoGeneratePhraseQueries;
     int determinizeWorkLimit = DEFAULT_DETERMINIZE_WORK_LIMIT;
+    private ImmutableSet<String> storedFields;
+
+    private final ReusableStringReader stringReader;
+
+    private final NoOpTokenizer noOpTokenizer;
 
     // So the generated QueryParser(CharStream) won't error out
     protected QueryParserBase() {
         super(null);
+        this.stringReader = new ReusableStringReader();
+        this.noOpTokenizer = new NoOpTokenizer();
+    }
+
+    public class NoOpTokenizer extends CharTokenizer {
+        @Override
+        protected boolean isTokenChar(int inputCharacter) {
+            return !Character.isISOControl(inputCharacter);
+        }
     }
 
     /**
@@ -117,9 +136,10 @@ public abstract class QueryParserBase extends QueryBuilder implements CommonQuer
      * @param f the default field for query terms.
      * @param a used to find terms in the query text.
      */
-    public void init(String f, Analyzer a) {
+    public void init(String f, Analyzer a, Set<String> storedFields) {
         setAnalyzer(a);
         field = f;
+        this.storedFields = ImmutableSet.copyOf(storedFields);
         setAutoGeneratePhraseQueries(false);
     }
 
@@ -528,6 +548,28 @@ public abstract class QueryParserBase extends QueryBuilder implements CommonQuer
                 operator == QueryParser.Operator.AND ? BooleanClause.Occur.MUST : BooleanClause.Occur.SHOULD;
         return createFieldQuery(
                 analyzer, occur, field, queryText, quoted || autoGeneratePhraseQueries, phraseSlop);
+    }
+
+    @Override
+    protected Query createFieldQuery(Analyzer analyzer, BooleanClause.Occur operator, String field, String queryText, boolean quoted, int phraseSlop) {
+        assert operator == BooleanClause.Occur.SHOULD || operator == BooleanClause.Occur.MUST;
+
+        // Use the analyzer to get all the tokens, and then build an appropriate
+        // query based on the analysis chain.
+
+        // f1 = 'bla'
+
+
+        if (storedFields.contains(field)) {
+            stringReader.setValue(queryText);
+            noOpTokenizer.setReader(stringReader);
+        }
+
+        try (TokenStream source = storedFields.contains(field) ? noOpTokenizer : analyzer.tokenStream(field, queryText)) {
+            return createFieldQuery(source, operator, field, quoted, phraseSlop);
+        } catch (IOException e) {
+            throw new RuntimeException("Error analyzing query text", e);
+        }
     }
 
     /*
