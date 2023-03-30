@@ -103,18 +103,6 @@ public class QueryPredicateDemoTest extends FDBRecordStoreQueryTestBase {
             int number = (Integer)Objects.requireNonNull(value.eval(store, context));
             return isPrime(number);
         }
-
-        private static boolean isPrime(int number) {
-            if (number <= 1) {
-                return false;
-            }
-            for (int i = 2; i <= number / 2; i++) {
-                if ((number % i) == 0) {
-                    return false;
-                }
-            }
-            return true;
-        }
     }
 
     @Test
