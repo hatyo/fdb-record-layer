@@ -75,11 +75,15 @@ public class MatchInfo {
     @Nonnull
     private final Optional<Value> remainingComputationValueOptional;
 
-    private MatchInfo(@Nonnull final Map<CorrelationIdentifier, ComparisonRange> parameterBindingMap,
+    @Nonnull
+    private final AliasMap aliasMap;
+
+    public MatchInfo(@Nonnull final Map<CorrelationIdentifier, ComparisonRange> parameterBindingMap,
                       @Nonnull final IdentityBiMap<Quantifier, PartialMatch> quantifierToPartialMatchMap,
                       @Nonnull final PredicateMap predicateMap,
                       @Nonnull final List<MatchedOrderingPart> matchedOrderingParts,
-                      @Nonnull final Optional<Value> remainingComputationValueOptional) {
+                      @Nonnull final Optional<Value> remainingComputationValueOptional,
+                      @Nonnull final AliasMap aliasMap) {
         this.parameterBindingMap = ImmutableMap.copyOf(parameterBindingMap);
         this.quantifierToPartialMatchMap = quantifierToPartialMatchMap.toImmutable();
         this.aliasToPartialMatchMapSupplier = Suppliers.memoize(() -> {
@@ -97,6 +101,7 @@ public class MatchInfo {
 
         this.matchedOrderingParts = ImmutableList.copyOf(matchedOrderingParts);
         this.remainingComputationValueOptional = remainingComputationValueOptional;
+        this.aliasMap = aliasMap;
     }
 
     @Nonnull
@@ -154,6 +159,11 @@ public class MatchInfo {
         return remainingComputationValueOptional;
     }
 
+    @Nonnull
+    public AliasMap getAliasMap() {
+        return aliasMap;
+    }
+
     /**
      * Derive if a scan is reverse by looking at all the bound key parts in this match info. The planner structures
      * are laid out in a way that they could theoretically support a scan direction by key part. In reality, we only
@@ -188,7 +198,8 @@ public class MatchInfo {
                 quantifierToPartialMatchMap,
                 predicateMap,
                 matchedOrderingParts,
-                remainingComputationValueOptional);
+                remainingComputationValueOptional,
+                aliasMap);
     }
 
     @Nonnull
@@ -209,14 +220,15 @@ public class MatchInfo {
 
     @Nonnull
     public static Optional<MatchInfo> tryFromMatchMap(@Nonnull final IdentityBiMap<Quantifier, PartialMatch> partialMatchMap) {
-        return tryMerge(partialMatchMap, ImmutableMap.of(), PredicateMap.empty(), Optional.empty());
+        return tryMerge(partialMatchMap, ImmutableMap.of(), PredicateMap.empty(), Optional.empty(), AliasMap.emptyMap());
     }
 
     @Nonnull
     public static Optional<MatchInfo> tryMerge(@Nonnull final IdentityBiMap<Quantifier, PartialMatch> partialMatchMap,
                                                @Nonnull final Map<CorrelationIdentifier, ComparisonRange> parameterBindingMap,
                                                @Nonnull final PredicateMap predicateMap,
-                                               @Nonnull Optional<Value> remainingComputationValueOptional) {
+                                               @Nonnull Optional<Value> remainingComputationValueOptional,
+                                               @Nonnull final AliasMap aliasMap) {
         final var parameterMapsBuilder = ImmutableList.<Map<CorrelationIdentifier, ComparisonRange>>builder();
         final var matchInfos = PartialMatch.matchesFromMap(partialMatchMap);
 
@@ -257,7 +269,8 @@ public class MatchInfo {
                         partialMatchMap,
                         predicateMap,
                         orderingParts,
-                        remainingComputationValueOptional));
+                        remainingComputationValueOptional,
+                        aliasMap));
     }
 
     public static Optional<Map<CorrelationIdentifier, ComparisonRange>> tryMergeParameterBindings(final Collection<Map<CorrelationIdentifier, ComparisonRange>> parameterBindingMaps) {

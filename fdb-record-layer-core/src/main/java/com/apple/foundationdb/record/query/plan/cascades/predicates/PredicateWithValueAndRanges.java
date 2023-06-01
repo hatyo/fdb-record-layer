@@ -117,6 +117,10 @@ public class PredicateWithValueAndRanges implements PredicateWithValue {
         return new PredicateWithValueAndRanges(value, ranges);
     }
 
+    public boolean isEquality() {
+        return getRanges().stream().allMatch(range -> range.getComparisons().stream().allMatch(comparison -> comparison.getType().isEquality()));
+    }
+
     @Nonnull
     public PredicateWithValueAndRanges withRanges(@Nonnull final Set<RangeConstraints> ranges) {
         return new PredicateWithValueAndRanges(value, ranges);

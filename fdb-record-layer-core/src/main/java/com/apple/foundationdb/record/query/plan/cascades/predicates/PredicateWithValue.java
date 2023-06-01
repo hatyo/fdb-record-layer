@@ -35,4 +35,6 @@ public interface PredicateWithValue extends LeafQueryPredicate {
 
     @Nonnull
     PredicateWithValue withValue(@Nonnull Value value);
+
+    boolean isEquality();
 }

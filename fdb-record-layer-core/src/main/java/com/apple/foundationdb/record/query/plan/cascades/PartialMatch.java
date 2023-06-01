@@ -23,15 +23,18 @@ package com.apple.foundationdb.record.query.plan.cascades;
 import com.apple.foundationdb.record.query.plan.cascades.expressions.RelationalExpression;
 import com.apple.foundationdb.record.query.plan.cascades.predicates.Placeholder;
 import com.apple.foundationdb.record.query.plan.cascades.predicates.QueryPredicate;
+import com.apple.foundationdb.record.query.plan.cascades.values.Value;
 import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nonnull;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -50,6 +53,7 @@ import java.util.function.Supplier;
  * match candidate, we can replace the reference on the query graph side with a scan over the match candidate's
  * materialized version (e.g. an index) and subsequent compensation.
  */
+@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 public class PartialMatch {
     /**
      * Alias map of all bound correlated references.

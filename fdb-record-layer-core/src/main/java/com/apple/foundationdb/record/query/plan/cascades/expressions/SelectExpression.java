@@ -408,7 +408,7 @@ public class SelectExpression implements RelationalExpressionWithChildren.Childr
                     .stream()
                     .allMatch(QueryPredicate::isTautology);
             if (allNonFiltering) {
-                return MatchInfo.tryMerge(partialMatchMap, mergedParameterBindingMap, PredicateMap.empty(), remainingValueComputationOptional)
+                return MatchInfo.tryMerge(partialMatchMap, mergedParameterBindingMap, PredicateMap.empty(), remainingValueComputationOptional, aliasMap)
                         .map(ImmutableList::of)
                         .orElse(ImmutableList.of());
             } else {
@@ -513,7 +513,7 @@ public class SelectExpression implements RelationalExpressionWithChildren.Childr
                                         MatchInfo.tryMergeParameterBindings(ImmutableList.of(mergedParameterBindingMap, parameterBindingMap));
 
                                 return allParameterBindingMapOptional
-                                        .flatMap(allParameterBindingMap -> MatchInfo.tryMerge(partialMatchMap, allParameterBindingMap, predicateMap, remainingValueComputationOptional))
+                                        .flatMap(allParameterBindingMap -> MatchInfo.tryMerge(partialMatchMap, allParameterBindingMap, predicateMap, remainingValueComputationOptional, aliasMap))
                                         .map(ImmutableList::of)
                                         .orElse(ImmutableList.of());
                             })

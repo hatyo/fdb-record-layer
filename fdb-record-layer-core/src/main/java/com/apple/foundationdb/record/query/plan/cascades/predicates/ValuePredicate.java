@@ -70,6 +70,10 @@ public class ValuePredicate implements PredicateWithValue {
         return new ValuePredicate(value, comparison);
     }
 
+    public boolean isEquality() {
+        return getComparison().getType().isEquality();
+    }
+
     @Nullable
     @Override
     public <M extends Message> Boolean eval(@Nonnull final FDBRecordStoreBase<M> store, @Nonnull final EvaluationContext context) {
