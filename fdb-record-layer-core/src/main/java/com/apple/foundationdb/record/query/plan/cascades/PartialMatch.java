@@ -119,7 +119,7 @@ public class PartialMatch {
         this.candidateRef = candidateRef;
         this.matchInfo = matchInfo;
         this.boundParameterPrefixMapSupplier = Suppliers.memoize(this::computeBoundParameterPrefixMap);
-        this.bindingPredicatesSupplier = this::computeBindingQueryPredicates;
+        this.bindingPredicatesSupplier = Suppliers.memoize(this::computeBindingQueryPredicates);
         this.matchedQuantifiersSupplier = Suppliers.memoize(this::computeMatchedQuantifiers);
         this.unmatchedQuantifiersSupplier = Suppliers.memoize(this::computeUnmatchedQuantifiers);
         this.compensatedAliasesSupplier = Suppliers.memoize(this::computeCompensatedAliases);
@@ -196,6 +196,11 @@ public class PartialMatch {
     }
 
     @Nonnull
+    public final Set<QueryPredicate> getBindingPredicates() {
+        return bindingPredicatesSupplier.get();
+    }
+
+    @Nonnull
     private Set<QueryPredicate> computeBindingQueryPredicates() {
         final var boundParameterPrefixMap = getBoundParameterPrefixMap();
         final var bindingQueryPredicates = Sets.<QueryPredicate>newIdentityHashSet();
@@ -208,6 +213,11 @@ public class PartialMatch {
         //
         for (final var entry : matchInfo.getAccumulatedPredicateMap().entries()) {
             final var predicateMapping = entry.getValue();
+
+            if (predicateMapping.getMappingKind() != PredicateMultiMap.PredicateMapping.MappingKind.REGULAR_IMPLIES_CANDIDATE) {
+                continue;
+            }
+
             final var candidatePredicate = predicateMapping.getCandidatePredicate();
             if (!(candidatePredicate instanceof Placeholder)) {
                 continue;
@@ -221,12 +231,6 @@ public class PartialMatch {
 
         return bindingQueryPredicates;
     }
-
-    @Nonnull
-    public final Set<QueryPredicate> getBindingPredicates() {
-        return bindingPredicatesSupplier.get();
-    }
-
 
     /**
      * Return a set of aliases that this partial match is responsible for covering, that is either the matches
@@ -289,5 +293,10 @@ public class PartialMatch {
                 .map(Objects::requireNonNull)
                 .map(PartialMatch::getMatchInfo)
                 .collect(ImmutableList.toImmutableList());
+    }
+
+    @Override
+    public String toString() {
+        return getQueryExpression().getClass().getSimpleName() + "[" + getMatchCandidate().getName() + "]";
     }
 }

@@ -20,6 +20,9 @@
 
 package com.apple.foundationdb.record.lucene.codec;
 
+import com.google.auto.service.AutoService;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import org.apache.lucene.codecs.FieldsConsumer;
 import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.codecs.PostingsFormat;
@@ -29,19 +32,26 @@ import org.apache.lucene.codecs.lucene84.Lucene84PostingsFormat;
 import org.apache.lucene.codecs.lucene84.LuceneOptimizedPostingsReader;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
-import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.index.Terms;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.Iterator;
 
 /**
  * {@code PostingsFormat} optimized for FDB storage.
  */
+@AutoService(PostingsFormat.class)
 public class LuceneOptimizedPostingsFormat extends PostingsFormat {
     PostingsFormat postingsFormat;
 
     public LuceneOptimizedPostingsFormat() {
-        super("Lucene84Optimized");
-        postingsFormat = new Lucene84PostingsFormat();
+        this(new Lucene84PostingsFormat());
+    }
+
+    public LuceneOptimizedPostingsFormat(PostingsFormat postingsFormat) {
+        super("RL" + postingsFormat.getName());
+        this.postingsFormat = postingsFormat;
     }
 
     @Override
@@ -52,16 +62,58 @@ public class LuceneOptimizedPostingsFormat extends PostingsFormat {
     @Override
     @SuppressWarnings("PMD.CloseResource")
     public FieldsProducer fieldsProducer(SegmentReadState state) throws IOException {
-        PostingsReaderBase postingsReader = new LuceneOptimizedPostingsReader(state);
-        boolean success = false;
-        try {
-            FieldsProducer ret = new BlockTreeTermsReader(postingsReader, state);
-            success = true;
-            return ret;
-        } finally {
-            if (!success) {
-                IOUtils.closeWhileHandlingException(postingsReader);
+        return new LazyFieldsProducer(state);
+    }
+
+    private static class LazyFieldsProducer extends FieldsProducer {
+
+        private Supplier<FieldsProducer> fieldsProducer;
+
+        private boolean initialized;
+
+        private LazyFieldsProducer(final SegmentReadState state) {
+            fieldsProducer = Suppliers.memoize(() -> {
+                try {
+                    PostingsReaderBase postingsReader = new LuceneOptimizedPostingsReader(state);
+                    return new BlockTreeTermsReader(postingsReader, state);
+                } catch (IOException ioe) {
+                    throw new UncheckedIOException(ioe);
+                } finally {
+                    initialized = true;
+                }
+            });
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (initialized) {
+                fieldsProducer.get().close();
             }
+        }
+
+        @Override
+        public void checkIntegrity() throws IOException {
+            fieldsProducer.get().checkIntegrity();
+        }
+
+        @Override
+        public Iterator<String> iterator() {
+            return fieldsProducer.get().iterator();
+        }
+
+        @Override
+        public Terms terms(final String field) throws IOException {
+            return fieldsProducer.get().terms(field);
+        }
+
+        @Override
+        public int size() {
+            return fieldsProducer.get().size();
+        }
+
+        @Override
+        public long ramBytesUsed() {
+            return fieldsProducer.get().ramBytesUsed();
         }
     }
 

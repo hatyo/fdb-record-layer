@@ -39,6 +39,34 @@ The Guava dependency version has been updated to 31.1. Projects may need to chec
 // end next release
 -->
 
+### 3.3.384.0
+
+
+### 3.3.382.0
+
+* **Bug fix** Fix grouping requested order if it is empty [(Issue #2150)](https://github.com/FoundationDB/fdb-record-layer/issues/2150)
+
+### 3.3.381.0
+
+* **Performance** only break ORs into UNIONs if beneficial for index matching [(Issue #2147)](https://github.com/FoundationDB/fdb-record-layer/issues/2147)
+
+### 3.3.380.0
+
+* **Bug fix** flatmap should honor skips and limits [(Issue #2140)](https://github.com/FoundationDB/fdb-record-layer/issues/2140)
+
+### 3.3.379.0
+
+* **Feature** cascades planner needs to enumerate OR factorizations properly [(Issue #2131)](https://github.com/FoundationDB/fdb-record-layer/issues/2131)
+
+### 3.3.378.0
+
+* **Bug fix** Removed infinite recursion from `LuceneIndexQueryPlan`'s `toString` implementation [(Issue #2136)](https://github.com/FoundationDB/fdb-record-layer/issues/2136)
+* **Feature** Record versions are now queryable by the Cascades planner, including mathcing on version indexes [(Issue #2089)](https://github.com/FoundationDB/fdb-record-layer/issues/2089)
+
+### 3.3.377.0
+
+* **Feature** Allow placeholders in aggregate index match candidate's underlying `SelectExpression` [(Issue #2135)](https://github.com/FoundationDB/fdb-record-layer/issues/2135)
+
 ### 3.3.376.0
 
 * **Bug fix** The plan string for `RecordQueryMapPlan` is reverted back to its value before [3.3.375.0](#333750) [(Issue #2132)](https://github.com/FoundationDB/fdb-record-layer/issues/2132)

@@ -34,7 +34,7 @@ import com.apple.foundationdb.record.provider.foundationdb.FDBStoreTimer;
 import com.apple.foundationdb.record.query.plan.PlanStringRepresentation;
 import com.apple.foundationdb.record.query.plan.cascades.AliasMap;
 import com.apple.foundationdb.record.query.plan.cascades.CorrelationIdentifier;
-import com.apple.foundationdb.record.query.plan.cascades.GroupExpressionRef;
+import com.apple.foundationdb.record.query.plan.cascades.ExpressionRef;
 import com.apple.foundationdb.record.query.plan.cascades.Quantifier;
 import com.apple.foundationdb.record.query.plan.cascades.TranslationMap;
 import com.apple.foundationdb.record.query.plan.cascades.explain.Attribute;
@@ -134,7 +134,8 @@ public class RecordQueryStreamingAggregationPlan implements RecordQueryPlanWithC
                         (FDBRecordStoreBase<Message>)store,
                         context,
                         inner.getAlias());
-        return new AggregateCursor<>(innerCursor, streamGrouping);
+        return new AggregateCursor<>(innerCursor, streamGrouping).skipThenLimit(executeProperties.getSkip(),
+                executeProperties.getReturnedRowLimit());
     }
 
     @Override
@@ -193,8 +194,8 @@ public class RecordQueryStreamingAggregationPlan implements RecordQueryPlanWithC
 
     @Nonnull
     @Override
-    public RecordQueryStreamingAggregationPlan withChild(@Nonnull final RecordQueryPlan child) {
-        return new RecordQueryStreamingAggregationPlan(Quantifier.physical(GroupExpressionRef.of(child), inner.getAlias()),
+    public RecordQueryStreamingAggregationPlan withChild(@Nonnull final ExpressionRef<? extends RecordQueryPlan> childRef) {
+        return new RecordQueryStreamingAggregationPlan(Quantifier.physical(childRef, inner.getAlias()),
                 groupingKeyValue,
                 aggregateValue,
                 groupingKeyAlias,
