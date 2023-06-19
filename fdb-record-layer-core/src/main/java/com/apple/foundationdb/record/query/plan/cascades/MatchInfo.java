@@ -22,6 +22,8 @@ package com.apple.foundationdb.record.query.plan.cascades;
 
 import com.apple.foundationdb.annotation.SpotBugsSuppressWarnings;
 import com.apple.foundationdb.record.query.plan.QueryPlanConstraint;
+import com.apple.foundationdb.record.query.plan.cascades.expressions.RelationalExpression;
+import com.apple.foundationdb.record.query.plan.cascades.typing.Type;
 import com.apple.foundationdb.record.query.plan.cascades.values.Value;
 import com.google.common.base.Equivalence;
 import com.google.common.base.Suppliers;
@@ -78,12 +80,16 @@ public class MatchInfo {
     @Nonnull
     private final AliasMap aliasMap;
 
+    @Nonnull
+    private final IdentityBiMap<Value, Value> valueMapping;
+
     public MatchInfo(@Nonnull final Map<CorrelationIdentifier, ComparisonRange> parameterBindingMap,
                       @Nonnull final IdentityBiMap<Quantifier, PartialMatch> quantifierToPartialMatchMap,
                       @Nonnull final PredicateMap predicateMap,
                       @Nonnull final List<MatchedOrderingPart> matchedOrderingParts,
                       @Nonnull final Optional<Value> remainingComputationValueOptional,
-                      @Nonnull final AliasMap aliasMap) {
+                      @Nonnull final AliasMap aliasMap,
+                      @Nonnull final IdentityBiMap<Value, Value> valueMapping) {
         this.parameterBindingMap = ImmutableMap.copyOf(parameterBindingMap);
         this.quantifierToPartialMatchMap = quantifierToPartialMatchMap.toImmutable();
         this.aliasToPartialMatchMapSupplier = Suppliers.memoize(() -> {
@@ -102,6 +108,7 @@ public class MatchInfo {
         this.matchedOrderingParts = ImmutableList.copyOf(matchedOrderingParts);
         this.remainingComputationValueOptional = remainingComputationValueOptional;
         this.aliasMap = aliasMap;
+        this.valueMapping = valueMapping;
     }
 
     @Nonnull
@@ -199,7 +206,8 @@ public class MatchInfo {
                 predicateMap,
                 matchedOrderingParts,
                 remainingComputationValueOptional,
-                aliasMap);
+                aliasMap,
+                valueMapping);
     }
 
     @Nonnull
@@ -293,5 +301,14 @@ public class MatchInfo {
         }
 
         return Optional.of(resultMap);
+    }
+
+    public static IdentityBiMap<Value, Value> pullUpValueMapping(@Nonnull final IdentityBiMap<Value, Value> valueMappings,
+                                                                 @Nonnull final RelationalExpression queryExpression,
+                                                                 @Nonnull final RelationalExpression candidateExpression,
+                                                                 @Nonnull final AliasMap aliasMap) {
+        for (final var valueMapping : valueMappings) {
+
+        }
     }
 }

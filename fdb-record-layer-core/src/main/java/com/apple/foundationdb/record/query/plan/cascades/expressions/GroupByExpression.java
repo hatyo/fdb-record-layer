@@ -33,7 +33,6 @@ import com.apple.foundationdb.record.query.plan.cascades.MatchedOrderingPart;
 import com.apple.foundationdb.record.query.plan.cascades.OrderingPart;
 import com.apple.foundationdb.record.query.plan.cascades.PartialMatch;
 import com.apple.foundationdb.record.query.plan.cascades.PredicateMap;
-import com.apple.foundationdb.record.query.plan.cascades.PredicateMultiMap;
 import com.apple.foundationdb.record.query.plan.cascades.Quantifier;
 import com.apple.foundationdb.record.query.plan.cascades.RequestedOrdering;
 import com.apple.foundationdb.record.query.plan.cascades.TranslationMap;
@@ -42,7 +41,6 @@ import com.apple.foundationdb.record.query.plan.cascades.explain.InternalPlanner
 import com.apple.foundationdb.record.query.plan.cascades.explain.PlannerGraph;
 import com.apple.foundationdb.record.query.plan.cascades.predicates.PredicateWithValue;
 import com.apple.foundationdb.record.query.plan.cascades.predicates.QueryPredicate;
-import com.apple.foundationdb.record.query.plan.cascades.predicates.ValuePredicate;
 import com.apple.foundationdb.record.query.plan.cascades.typing.Type;
 import com.apple.foundationdb.record.query.plan.cascades.values.AggregateValue;
 import com.apple.foundationdb.record.query.plan.cascades.values.FieldValue;
@@ -56,7 +54,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
-import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -322,7 +319,7 @@ public class GroupByExpression implements RelationalExpressionWithChildren, Inte
             // check if the remaining computation is something we can work with.
             final var queryExpression = partialMatch.getQueryExpression();
             final var candidateExpression = Iterables.getOnlyElement(partialMatch.getCandidateRef().getMembers());
-            if (!expressionAreGroupCompatible(queryExpression, candidateExpression, partialMatch.getBindingPredicates(), partialMatch.getMatchInfo().getAliasMap())) {
+            if (!expressionsAreGroupCompatible(queryExpression, candidateExpression, partialMatch.getBindingPredicates(), partialMatch.getMatchInfo().getAliasMap())) {
                 return Optional.empty(); // not match.
             }
         }
@@ -338,10 +335,10 @@ public class GroupByExpression implements RelationalExpressionWithChildren, Inte
                         aliasMap));
     }
 
-    private boolean expressionAreGroupCompatible(@Nonnull final RelationalExpression queryExpression,
-                                                 @Nonnull final RelationalExpression candidateExpression,
-                                                 @Nonnull final Set<QueryPredicate> boundPredicates,
-                                                 @Nonnull final AliasMap aliasMap) {
+    private boolean expressionsAreGroupCompatible(@Nonnull final RelationalExpression queryExpression,
+                                                  @Nonnull final RelationalExpression candidateExpression,
+                                                  @Nonnull final Set<QueryPredicate> boundPredicates,
+                                                  @Nonnull final AliasMap aliasMap) {
         if (!(queryExpression instanceof SelectExpression)) {
             return false;
         }
