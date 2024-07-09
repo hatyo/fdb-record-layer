@@ -73,6 +73,7 @@ import com.apple.foundationdb.record.query.plan.cascades.values.CountValue;
 import com.apple.foundationdb.record.query.plan.cascades.values.FieldValue;
 import com.apple.foundationdb.record.query.plan.cascades.values.IndexOnlyAggregateValue;
 import com.apple.foundationdb.record.query.plan.cascades.values.NumericAggregationValue;
+import com.apple.foundationdb.record.query.plan.cascades.values.QuantifiedObjectValue;
 import com.apple.foundationdb.record.query.plan.cascades.values.RecordConstructorValue;
 import com.apple.foundationdb.record.query.plan.cascades.values.Value;
 import com.apple.foundationdb.record.query.plan.plans.QueryResult;
@@ -1316,7 +1317,7 @@ class FDBNestedRepeatedQueryTest extends FDBRecordStoreQueryTestBase {
             final Quantifier outerQun = outerRecQun();
             final Quantifier entryQun = explodeEntryKeys(outerQun);
             final Quantifier selectWhere = selectWhereGroupByKey(outerQun, entryQun);
-            final Quantifier groupBy = groupAggregateByKey(selectWhere, new CountValue.CountFn(), RecordConstructorValue.ofColumns(List.of()));
+            final Quantifier groupBy = groupAggregateByKey(selectWhere, new CountValue.CountFn(), QuantifiedObjectValue.of(selectWhere));
             return unsorted(selectHaving(groupBy));
         });
     }

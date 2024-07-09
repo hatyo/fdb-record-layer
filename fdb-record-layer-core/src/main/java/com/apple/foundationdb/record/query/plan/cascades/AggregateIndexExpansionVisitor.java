@@ -70,7 +70,8 @@ import java.util.stream.Stream;
 public class AggregateIndexExpansionVisitor extends KeyExpressionExpansionVisitor
                                             implements ExpansionVisitor<KeyExpressionExpansionVisitor.VisitorState> {
     @Nonnull
-    private static final Supplier<Map<String, BuiltInFunction<? extends Value>>> aggregateMap = Suppliers.memoize(AggregateIndexExpansionVisitor::computeAggregateMap);
+    private static final Supplier<Map<String, BuiltInFunction<? extends Value>>> aggregateMap =
+            Suppliers.memoize(AggregateIndexExpansionVisitor::computeAggregateMap);
 
     @Nonnull
     private final Index index;
@@ -218,7 +219,7 @@ public class AggregateIndexExpansionVisitor extends KeyExpressionExpansionVisito
         // construct aggregation RCV
         final Value argument;
         if (groupedValue instanceof EmptyValue) {
-            argument = RecordConstructorValue.ofColumns(ImmutableList.of());
+            argument = QuantifiedObjectValue.of(selectWhereQun);
         } else if (groupedValue instanceof FieldValue) {
             final var aliasMap = AliasMap.identitiesFor(Sets.union(selectWhereQun.getCorrelatedTo(),
                     groupedValue.getCorrelatedTo()));
@@ -243,15 +244,20 @@ public class AggregateIndexExpansionVisitor extends KeyExpressionExpansionVisito
                 .map(Column::getValue)
                 .collect(ImmutableList.toImmutableList());
         final var selectQunValue = selectWhereQun.getRangesOver().get().getResultValue();
-        final var aliasMap = AliasMap.identitiesFor(Sets.union(selectQunValue.getCorrelatedTo(), groupingValues.stream().flatMap(v -> v.getCorrelatedTo().stream()).collect(ImmutableSet.toImmutableSet())));
-        final var pulledUpGroupingValuesMap = selectQunValue.pullUp(groupingValues, aliasMap, ImmutableSet.of(), selectWhereQun.getAlias());
-        final var pulledUpGroupingValues = groupingValues.stream().map(groupingValue -> {
-            if (!pulledUpGroupingValuesMap.containsKey(groupingValue)) {
-                throw new RecordCoreException("could not pull grouping value " + groupingValue)
-                        .addLogInfo(LogMessageKeys.VALUE, groupingValue);
-            }
-            return pulledUpGroupingValuesMap.get(groupingValue);
-        }).collect(ImmutableList.toImmutableList());
+        final var aliasMap = AliasMap.identitiesFor(
+                Sets.union(selectQunValue.getCorrelatedTo(),
+                        groupingValues.stream().flatMap(v -> v.getCorrelatedTo().stream())
+                                .collect(ImmutableSet.toImmutableSet())));
+        final var pulledUpGroupingValuesMap =
+                selectQunValue.pullUp(groupingValues, aliasMap, ImmutableSet.of(), selectWhereQun.getAlias());
+        final var pulledUpGroupingValues =
+                groupingValues.stream().map(groupingValue -> {
+                    if (!pulledUpGroupingValuesMap.containsKey(groupingValue)) {
+                        throw new RecordCoreException("could not pull grouping value " + groupingValue)
+                                .addLogInfo(LogMessageKeys.VALUE, groupingValue);
+                    }
+                    return pulledUpGroupingValuesMap.get(groupingValue);
+                }).collect(ImmutableList.toImmutableList());
 
         // construct grouping column(s) value, the grouping column is _always_ fixed at position-0 in the underlying select-where.
         final var groupingColsValue = RecordConstructorValue.ofUnnamed(pulledUpGroupingValues);
