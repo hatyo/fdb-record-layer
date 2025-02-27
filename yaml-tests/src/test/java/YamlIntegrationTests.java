@@ -298,6 +298,7 @@ public class YamlIntegrationTests {
     }
 
     @TestTemplate
+    @ExcludeYamlTestConfig(value = YamlTestConfigFilters.DO_NOT_USE_JDBC, reason = "no support for uuid in JDBC yet")
     public void uuidTest(YamlTest.Runner runner) throws Exception {
         runner.runYamsql("uuid.yamsql");
     }

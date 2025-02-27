@@ -30,6 +30,7 @@ import com.google.protobuf.Message;
 import com.google.protobuf.ZeroCopyByteString;
 
 import javax.annotation.Nonnull;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -57,6 +58,11 @@ public class TupleFieldsHelper {
      */
     public static boolean isTupleField(@Nonnull Descriptors.Descriptor descriptor) {
         return DESCRIPTORS.contains(descriptor);
+    }
+
+    @Nonnull
+    public static Optional<Descriptors.Descriptor> getStructurallyEqualToDescriptorMaybe(@Nonnull final Descriptors.Descriptor descriptor) {
+        return DESCRIPTORS.stream().filter(d -> d.toProto().toString().equals(descriptor.toProto().toString())).findFirst();
     }
 
     /**

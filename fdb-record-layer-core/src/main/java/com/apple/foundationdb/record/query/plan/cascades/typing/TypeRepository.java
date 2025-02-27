@@ -20,6 +20,7 @@
 
 package com.apple.foundationdb.record.query.plan.cascades.typing;
 
+import com.apple.foundationdb.record.metadata.expressions.TupleFieldsHelper;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Verify;
 import com.google.common.collect.BiMap;
@@ -172,7 +173,8 @@ public class TypeRepository {
         if (msgType == null) {
             msgType = msgDescriptorMapFull.get(msgTypeName);
         }
-        return msgType;
+        final var structurallyEqualPredefinedDescriptorMaybe = TupleFieldsHelper.getStructurallyEqualToDescriptorMaybe(msgType);
+        return structurallyEqualPredefinedDescriptorMaybe.orElse(msgType);
     }
 
     /**

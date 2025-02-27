@@ -19,8 +19,8 @@
 
 ---
 schema_template:
-    create table ta(a bigint, b uuid, primary key(a))
-#    create table tb(a uuid, b bigint, primary key(a))
+#    create table ta(a bigint, b uuid, primary key(a))
+    create table tb(a uuid, b bigint, primary key(a))
 #    create table tc(a bigint, b uuid, primary key(a, b))
 #    create table td(a bigint, b uuid, c bigint, primary key(a))
 ---
