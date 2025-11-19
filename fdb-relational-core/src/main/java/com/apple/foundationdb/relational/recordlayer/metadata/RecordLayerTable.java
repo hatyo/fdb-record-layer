@@ -272,8 +272,6 @@ public final class RecordLayerTable implements Table {
 
         @Nonnull
         public Builder addGeneration(int number, @Nonnull DescriptorProtos.FieldOptions options) {
-            Assert.thatUnchecked(!generations.containsKey(number), ErrorCode.TABLE_ALREADY_EXISTS, "Duplicate field number %d for generation of Table %s", number, name);
-            Assert.thatUnchecked(!generations.containsValue(options), ErrorCode.TABLE_ALREADY_EXISTS, "Duplicated options for different generations of Table %s", name);
             generations.put(number, options);
             return this;
         }
