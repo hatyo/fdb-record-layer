@@ -86,6 +86,12 @@ public class RecordMetadataDeserializer {
                 .setIntermingleTables(!recordMetaData.primaryKeyHasRecordTypePrefix());
         final Map<String, RecordLayerTable.Builder> nameToTableBuilder = new HashMap<>();
         for (final Descriptors.FieldDescriptor registeredType : registeredTypes) {
+            final boolean isDeprecated = registeredType.getOptions() != null && registeredType.getOptions().getDeprecated();
+            if (isDeprecated) {
+                // Deprecated record types and enums are excluded from the schema template. They cannot be queried via SQL
+                // and are not visible to the query planner.
+                continue;
+            }
             switch (registeredType.getType()) {
                 case MESSAGE:
                     final String storageName = registeredType.getMessageType().getName();

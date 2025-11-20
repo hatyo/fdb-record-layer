@@ -817,6 +817,45 @@ public class SchemaTemplateSerDeTests {
         Assertions.assertFalse(viewOpt.isPresent());
     }
 
+    @Test
+    void testDeprecatedRecordTypesAreExcludedFromDeserialization() {
+        // Create field options for deprecated and non-deprecated record types
+        final var deprecatedOptions = DescriptorProtos.FieldOptions.newBuilder().setDeprecated(true).build();
+        final var activeOptions = DescriptorProtos.FieldOptions.newBuilder().setDeprecated(false).build();
+
+        // Create a schema template with multiple tables, some with deprecated generations
+        var testcase = new HashMap<String, List<NonnullPair<Integer, DescriptorProtos.FieldOptions>>>();
+        testcase.put("ActiveTable1", List.of(NonnullPair.of(1, activeOptions)));
+        testcase.put("DeprecatedTable", List.of(NonnullPair.of(2, deprecatedOptions)));
+        testcase.put("ActiveTable2", List.of(NonnullPair.of(3, activeOptions)));
+
+        var originalTemplate = getTestRecordLayerSchemaTemplate(testcase);
+
+        // Verify original template has all 4 tables
+        Assertions.assertEquals(3, originalTemplate.getTables().size());
+        Assertions.assertTrue(originalTemplate.findTableByName("ActiveTable1").isPresent());
+        Assertions.assertTrue(originalTemplate.findTableByName("DeprecatedTable").isPresent());
+        Assertions.assertTrue(originalTemplate.findTableByName("ActiveTable2").isPresent());
+
+        // Serialize to RecordMetaData
+        var recordMetadata = originalTemplate.toRecordMetadata();
+
+        // Deserialize back to RecordLayerSchemaTemplate
+        var deserializedTemplate = RecordLayerSchemaTemplate.fromRecordMetadata(
+                recordMetadata, "TestSchemaTemplate", 1);
+
+        // Verify that deprecated record types are excluded from the deserialized template
+        // Only ActiveTable1 and ActiveTable2 should be present (non-deprecated generations only)
+        Assertions.assertEquals(2, deserializedTemplate.getTables().size());
+
+        // Verify active tables are present
+        Assertions.assertTrue(deserializedTemplate.findTableByName("ActiveTable1").isPresent());
+        Assertions.assertTrue(deserializedTemplate.findTableByName("ActiveTable2").isPresent());
+
+        // Verify deprecated table is NOT present
+        Assertions.assertFalse(deserializedTemplate.findTableByName("DeprecatedTable").isPresent());
+    }
+
     private static final class RecordMetadataDeserializerWithPeekingFunctionSupplier extends RecordMetadataDeserializer {
 
         @Nonnull

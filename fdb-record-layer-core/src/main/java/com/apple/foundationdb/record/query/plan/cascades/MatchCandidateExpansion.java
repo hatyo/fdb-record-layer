@@ -36,8 +36,10 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Utility methods for expanding certain indexes into {@link MatchCandidate}s. This should be used by
@@ -117,19 +119,36 @@ public final class MatchCandidateExpansion {
         return Optional.empty();
     }
 
+    /**
+     * Creates a match candidate from the primary key definition for the specified record types.
+     * This method filters out deprecated record types and creates an expansion based on primary
+     * key access patterns.
+     *
+     * @param metaData the record metadata containing type and index information
+     * @param queriedRecordTypeNames the names of record types to include in the query
+     * @param primaryKey the primary key expression to use for the match candidate, or {@code null} if none
+     * @param isReverse {@code true} if the scan should be in reverse order, {@code false} otherwise
+     * @return an {@link Optional} containing the match candidate if a primary key is defined, empty otherwise
+     */
     @Nonnull
     public static Optional<MatchCandidate> fromPrimaryDefinition(@Nonnull final RecordMetaData metaData,
                                                                  @Nonnull final Set<String> queriedRecordTypeNames,
                                                                  @Nullable KeyExpression primaryKey,
                                                                  final boolean isReverse) {
         if (primaryKey != null) {
-            final var availableRecordTypes = metaData.getRecordTypes().values();
+            final var availableRecordTypes = metaData.getRecordTypes().values().stream()
+                    .filter(recordType -> !metaData.isDeprecated(recordType))
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
             final var queriedRecordTypes =
                     availableRecordTypes.stream()
                             .filter(recordType -> queriedRecordTypeNames.contains(recordType.getName()))
                             .collect(ImmutableList.toImmutableList());
 
-            final var baseRef = createBaseRef(metaData.getRecordTypes().keySet(), queriedRecordTypeNames, queriedRecordTypes, new PrimaryAccessHint());
+            final var availableRecordNames = metaData.getRecordTypes().keySet().stream()
+                    .filter(recordTypeName -> !metaData.isDeprecated(recordTypeName))
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+
+            final var baseRef = createBaseRef(availableRecordNames, queriedRecordTypeNames, queriedRecordTypes, new PrimaryAccessHint());
             final var expansionVisitor = new PrimaryAccessExpansionVisitor(availableRecordTypes, queriedRecordTypes);
             return Optional.of(expansionVisitor.expand(() -> Quantifier.forEach(baseRef), primaryKey, isReverse));
         }

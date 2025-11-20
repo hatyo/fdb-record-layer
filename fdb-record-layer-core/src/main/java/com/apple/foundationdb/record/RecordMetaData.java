@@ -493,6 +493,26 @@ public class RecordMetaData implements RecordMetaDataProvider {
         });
     }
 
+    /**
+     * Check if a record type is deprecated based on its field options in the union descriptor.
+     *
+     * @param recordType the record type to check
+     * @return {@code true} if the record type's union field is marked as deprecated, {@code false} otherwise
+     */
+    public boolean isDeprecated(@Nonnull RecordType recordType) {
+        final var fieldDescriptor = unionFields.get(recordType.getDescriptor());
+        final var fieldOptions = fieldDescriptor.getOptions();
+        if (fieldOptions == null) {
+            return false;
+        }
+        return fieldOptions.getDeprecated();
+    }
+
+    public boolean isDeprecated(@Nonnull String recordName) {
+        final var recordType = getRecordType(recordName);
+        return isDeprecated(recordType);
+    }
+
     @Nullable
     @API(API.Status.DEPRECATED)
     public KeyExpression getRecordCountKey() {

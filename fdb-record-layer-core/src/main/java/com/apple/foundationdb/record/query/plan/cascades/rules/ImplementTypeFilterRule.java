@@ -23,7 +23,6 @@ package com.apple.foundationdb.record.query.plan.cascades.rules;
 import com.apple.foundationdb.annotation.API;
 import com.apple.foundationdb.record.query.plan.cascades.ImplementationCascadesRule;
 import com.apple.foundationdb.record.query.plan.cascades.ImplementationCascadesRuleCall;
-import com.apple.foundationdb.record.query.plan.cascades.LinkedIdentitySet;
 import com.apple.foundationdb.record.query.plan.cascades.PlanPartition;
 import com.apple.foundationdb.record.query.plan.cascades.Quantifier;
 import com.apple.foundationdb.record.query.plan.cascades.Reference;
@@ -78,26 +77,15 @@ public class ImplementTypeFilterRule extends ImplementationCascadesRule<LogicalT
         final var logicalTypeFilterExpression = call.get(root);
         final var innerReference = call.get(innerReferenceMatcher);
         final var planPartition = call.get(innerPlanPartitionMatcher);
-        final var noTypeFilterNeeded = new LinkedIdentitySet<RecordQueryPlan>();
         final var unsatisfiedMapBuilder = ImmutableMultimap.<Set<String>, RecordQueryPlan>builder();
 
         for (final var innerPlan : planPartition.getPlans()) {
             final var childRecordTypes = new RecordTypesVisitor(call.newAliasResolver()).visit(innerPlan);
             final var filterRecordTypes = Sets.newHashSet(logicalTypeFilterExpression.getRecordTypes());
-
-            if (filterRecordTypes.containsAll(childRecordTypes)) {
-                noTypeFilterNeeded.add(innerPlan);
-            } else {
-                unsatisfiedMapBuilder.put(Sets.intersection(filterRecordTypes, childRecordTypes), innerPlan);
-            }
+            unsatisfiedMapBuilder.put(Sets.intersection(filterRecordTypes, childRecordTypes), innerPlan);
         }
 
         final var unsatisfiedMap = unsatisfiedMapBuilder.build();
-
-        if (!noTypeFilterNeeded.isEmpty()) {
-            call.yieldPlans(noTypeFilterNeeded);
-        }
-
         for (Map.Entry<Set<String>, Collection<RecordQueryPlan>> unsatisfiedEntry : unsatisfiedMap.asMap().entrySet()) {
             call.yieldPlan(
                     new RecordQueryTypeFilterPlan(
