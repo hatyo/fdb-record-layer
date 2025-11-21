@@ -1,4 +1,17 @@
 all-tests:
+-   query: EXPLAIN select "level0.field1"."level1$field.1"."level2$field.1" from "foo.table$nested"
+        where id = 1
+    explain: 'COVERING(foo.table$nested.idx <,> -> [ID: KEY[2], level0__2field1: [level1__1field__21:
+        [level2__1field__21: KEY[0]]]]) | FILTER _.ID EQUALS promote(@c12 AS LONG)
+        | MAP (_.level0.field1.level1$field.1.level2$field.1 AS level2$field.1)'
+    task_count: 474
+    task_total_time_ms: 196
+    transform_count: 114
+    transform_time_ms: 143
+    transform_yield_count: 33
+    insert_time_ms: 10
+    insert_new_count: 52
+    insert_reused_count: 6
 -   query: EXPLAIN select "foo.tableA".* from "foo.tableA";
     explain: 'COVERING(foo.tableA.idx <,> -> [foo__2tableA__2A1: KEY[0], foo__2tableA__2A2:
         KEY[1], foo__2tableA__2A3: KEY[2]]) | MAP (_.foo.tableA.A1 AS foo.tableA.A1,
