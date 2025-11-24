@@ -26,12 +26,14 @@ import com.apple.foundationdb.record.query.plan.cascades.Quantifier;
 import com.apple.foundationdb.record.query.plan.cascades.values.Value;
 import com.apple.foundationdb.record.query.plan.cascades.values.translation.TranslationMap;
 import com.apple.foundationdb.record.query.plan.plans.RecordQuerySetPlan;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Verify;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Streams;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -68,7 +70,7 @@ public class RecursiveUnionExpression extends AbstractRelationalExpressionWithCh
      * This enum specifies how the recursive leg of a recursive union should traverse and process
      * the intermediate results during query execution.
      */
-    public enum TraversalStrategy {
+    public enum TraversalOrder {
         /**
          * No specific traversal order is enforced. The implementation is free to choose
          * any traversal strategy that is most efficient, potentially mixing different
@@ -99,6 +101,175 @@ public class RecursiveUnionExpression extends AbstractRelationalExpressionWithCh
          * need to process children before processing their parent records.
          */
         POSTORDER
+    }
+
+    public static final class TraversalStrategy {
+
+        @Nonnull
+        private final TraversalOrder traversalOrder;
+
+        @Nonnull
+        private final TraversalBehavior traversalBehavior;
+
+        private TraversalStrategy(@Nonnull final TraversalOrder traversalOrder,
+                                  @Nonnull final TraversalBehavior traversalBehavior) {
+            this.traversalOrder = traversalOrder;
+            this.traversalBehavior = traversalBehavior;
+        }
+
+        @Nonnull
+        public TraversalBehavior getTraversalBehavior() {
+            return traversalBehavior;
+        }
+
+        @Nonnull
+        @VisibleForTesting
+        public TraversalOrder getTraversalOrder() {
+            return traversalOrder;
+        }
+
+        @Nonnull
+        TraversalStrategy translate(@Nonnull final TranslationMap translationMap) {
+            if (traversalBehavior == TraversalBehavior.DEFAULT_BEHAVIOR) {
+                return this;
+            }
+            final var translatedDfsTraversalBehavior = traversalBehavior.translate(translationMap);
+            if (translatedDfsTraversalBehavior == traversalBehavior) {
+                return this;
+            }
+            return new TraversalStrategy(traversalOrder, translatedDfsTraversalBehavior);
+        }
+
+        public boolean preOrderTraversalAllowed() {
+            return traversalOrder == TraversalOrder.ANY || traversalOrder == TraversalOrder.PREORDER;
+        }
+
+        public boolean postOrderTraversalAllowed() {
+            return traversalOrder == TraversalOrder.ANY || traversalOrder == TraversalOrder.POSTORDER;
+        }
+
+        public boolean levelTraversalAllowed() {
+            return traversalOrder == TraversalOrder.ANY || traversalOrder == TraversalOrder.LEVEL;
+        }
+
+        @Override
+        public boolean equals(final Object o) {
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            final TraversalStrategy that = (TraversalStrategy)o;
+            return traversalOrder == that.traversalOrder && Objects.equals(traversalBehavior, that.traversalBehavior);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(traversalOrder, traversalBehavior);
+        }
+
+        @Nonnull
+        public static TraversalStrategy ofPreOrderWithCheck(@Nullable final Value checkValue, boolean errorOnMismatch) {
+            TraversalBehavior traversalBehavior = TraversalBehavior.noCheck();
+            if (checkValue != null) {
+                traversalBehavior = TraversalBehavior.check(checkValue, errorOnMismatch);
+            }
+            return new TraversalStrategy(TraversalOrder.PREORDER, traversalBehavior);
+        }
+
+        @Nonnull
+        public static TraversalStrategy ofPreOrder() {
+            return new TraversalStrategy(TraversalOrder.PREORDER, TraversalBehavior.noCheck());
+        }
+
+        @Nonnull
+        public static TraversalStrategy ofPostOrderWithCheck(@Nullable final Value checkValue, boolean errorOnMismatch) {
+            TraversalBehavior traversalBehavior = TraversalBehavior.noCheck();
+            if (checkValue != null) {
+                traversalBehavior = TraversalBehavior.check(checkValue, errorOnMismatch);
+            }
+            return new TraversalStrategy(TraversalOrder.POSTORDER, traversalBehavior);
+        }
+
+        @Nonnull
+        public static TraversalStrategy ofPostOrder() {
+            return new TraversalStrategy(TraversalOrder.PREORDER, TraversalBehavior.noCheck());
+        }
+
+        @Nonnull
+        public static TraversalStrategy ofLevelOrder() {
+            return new TraversalStrategy(TraversalOrder.PREORDER, TraversalBehavior.noCheck());
+        }
+
+        @Nonnull
+        public static TraversalStrategy ofAnyOrder() {
+            return new TraversalStrategy(TraversalOrder.ANY, TraversalBehavior.noCheck());
+        }
+
+        public static final class TraversalBehavior {
+
+            @Nonnull
+            private static final TraversalBehavior DEFAULT_BEHAVIOR = new TraversalBehavior(null, false);
+
+            @Nullable
+            private final Value checkValue;
+
+            private final boolean errorOnMismatch;
+
+            private TraversalBehavior(@Nullable final Value checkValue,
+                                     final boolean errorOnMismatch) {
+                this.checkValue = checkValue;
+                this.errorOnMismatch = errorOnMismatch;
+            }
+
+            @Nonnull
+            public TraversalBehavior translate(@Nonnull TranslationMap translationMap) {
+                if (checkValue == null) {
+                    return this;
+                }
+                final var translatedCheckValue = checkValue.translateCorrelations(translationMap);
+                if (translatedCheckValue == checkValue) {
+                    return this;
+                }
+                return new TraversalBehavior(translatedCheckValue, errorOnMismatch);
+            }
+
+            @Override
+            public boolean equals(final Object o) {
+                if (o == null || getClass() != o.getClass()) {
+                    return false;
+                }
+                final TraversalBehavior that = (TraversalBehavior)o;
+                return errorOnMismatch == that.errorOnMismatch && Objects.equals(checkValue, that.checkValue);
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(checkValue, errorOnMismatch);
+            }
+
+            public boolean isNoCheck() {
+                return this == DEFAULT_BEHAVIOR;
+            }
+
+            @Nonnull
+            public Value getCheckFunction() {
+                Verify.verify(checkValue != null);
+                return checkValue;
+            }
+
+            public boolean isErrorOnMismatch() {
+                return errorOnMismatch;
+            }
+
+            @Nonnull
+            public static TraversalBehavior noCheck() {
+                return DEFAULT_BEHAVIOR;
+            }
+
+            @Nonnull
+            public static TraversalBehavior check(@Nonnull final Value checkFunction, final boolean errorOnMismatch) {
+                return new TraversalBehavior(checkFunction, errorOnMismatch);
+            }
+        }
     }
 
     public RecursiveUnionExpression(@Nonnull final Quantifier initialState,
@@ -143,6 +314,11 @@ public class RecursiveUnionExpression extends AbstractRelationalExpressionWithCh
     }
 
     @Nonnull
+    public TraversalStrategy getTraversalStrategy() {
+        return traversalStrategy;
+    }
+
+    @Nonnull
     @Override
     public Value getResultValue() {
         return resultValue;
@@ -164,7 +340,7 @@ public class RecursiveUnionExpression extends AbstractRelationalExpressionWithCh
             return false;
         }
         final var otherRecursiveUnionExpression = (RecursiveUnionExpression)otherExpression;
-        return traversalStrategy == otherRecursiveUnionExpression.traversalStrategy &&
+        return traversalStrategy.equals(otherRecursiveUnionExpression.traversalStrategy) &&
                 (tempTableScanAlias.equals(otherRecursiveUnionExpression.tempTableScanAlias)
                         || equivalences.containsMapping(tempTableScanAlias, otherRecursiveUnionExpression.tempTableScanAlias)) &&
                 (tempTableInsertAlias.equals(otherRecursiveUnionExpression.tempTableInsertAlias)
@@ -198,8 +374,9 @@ public class RecursiveUnionExpression extends AbstractRelationalExpressionWithCh
                 && !translationMap.containsSourceAlias(tempTableInsertAlias));
         final var translatedInitialStateQun = translatedQuantifiers.get(0);
         final var translatedRecursiveStateQun = translatedQuantifiers.get(1);
+        final var translatedTraversalStrategy = traversalStrategy.translate(translationMap);
         return new RecursiveUnionExpression(translatedInitialStateQun, translatedRecursiveStateQun,
-                tempTableScanAlias, tempTableInsertAlias, traversalStrategy);
+                tempTableScanAlias, tempTableInsertAlias, translatedTraversalStrategy);
     }
 
     @Nonnull
@@ -223,11 +400,11 @@ public class RecursiveUnionExpression extends AbstractRelationalExpressionWithCh
     }
 
     public boolean preOrderTraversalAllowed() {
-        return traversalStrategy == TraversalStrategy.ANY || traversalStrategy == TraversalStrategy.PREORDER;
+        return traversalStrategy.preOrderTraversalAllowed();
     }
 
     public boolean postOrderTraversalAllowed() {
-        return traversalStrategy == TraversalStrategy.ANY || traversalStrategy == TraversalStrategy.POSTORDER;
+        return traversalStrategy.postOrderTraversalAllowed();
     }
 
     public boolean dfsTraversalAllowed() {
@@ -235,6 +412,6 @@ public class RecursiveUnionExpression extends AbstractRelationalExpressionWithCh
     }
 
     public boolean levelTraversalAllowed() {
-        return traversalStrategy == TraversalStrategy.ANY || traversalStrategy == TraversalStrategy.LEVEL;
+        return traversalStrategy.levelTraversalAllowed();
     }
 }

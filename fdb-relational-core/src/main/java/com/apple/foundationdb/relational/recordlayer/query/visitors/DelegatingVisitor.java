@@ -455,6 +455,11 @@ public class DelegatingVisitor<D extends TypedVisitor> implements TypedVisitor {
         return getDelegate().visitTraversalOrderClause(ctx);
     }
 
+    @Override
+    public Object visitCheckClause(final RelationalParser.CheckClauseContext ctx) {
+        return getDelegate().visitCheckClause(ctx);
+    }
+
     @Nonnull
     @Override
     public LogicalOperator visitNamedQuery(@Nonnull RelationalParser.NamedQueryContext ctx) {

@@ -585,7 +585,7 @@ public abstract class TempTableTestBase extends FDBRecordStoreQueryTestBase {
          */
         @Nonnull
         public List<Long> calculateDescendants(long vertex, @Nonnull final RecursiveUnionExpression.TraversalStrategy traversalStrategy) {
-            switch (traversalStrategy) {
+            switch (traversalStrategy.getTraversalOrder()) {
                 case LEVEL:
                     return calculateDescendantsLevelOrder(vertex);
                 case PREORDER:

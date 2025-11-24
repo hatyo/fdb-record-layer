@@ -2256,8 +2256,13 @@ message PRecordQueryRecursiveDfsJoinPlan {
     PRE_ORDER = 1;
     POST_ORDER = 2;
   }
+  message PTraversalBehavior {
+    optional PValue check_value = 1;
+    optional bool error_on_mismatch = 3;
+  }
   optional PPhysicalQuantifier root_quantifier = 1;
   optional PPhysicalQuantifier child_quantifier = 2;
   optional string prior_value_correlation = 3;
   optional PDfsTraversalStrategy dfs_traversal_strategy = 4;
+  optional PTraversalBehavior traversal_behavior = 5;
 }

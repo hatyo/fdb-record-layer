@@ -67,14 +67,17 @@ public final class RecursiveCursor<T> implements RecordCursor<RecursiveCursor.Re
 
     private final boolean isPreorder;
 
+    private final boolean errorOnCheckMismatch;
+
     private RecursiveCursor(@Nonnull ChildCursorFunction<T> childCursorFunction,
                             @Nullable Function<T, byte[]> checkValueFunction,
                             @Nonnull List<RecursiveNode<T>> nodes,
-                            final boolean isPreorder) {
+                            final boolean isPreorder, final boolean errorOnCheckMismatch) {
         this.childCursorFunction = childCursorFunction;
         this.checkValueFunction = checkValueFunction;
         this.nodes = nodes;
         this.isPreorder = isPreorder;
+        this.errorOnCheckMismatch = errorOnCheckMismatch;
     }
 
     /**
@@ -91,7 +94,8 @@ public final class RecursiveCursor<T> implements RecordCursor<RecursiveCursor.Re
                                                 @Nonnull ChildCursorFunction<T> childCursorFunction,
                                                 @Nullable Function<T, byte[]> checkValueFunction,
                                                 @Nullable byte[] continuation,
-                                                final boolean isPreorder) {
+                                                final boolean isPreorder,
+                                                final boolean errorOnCheckMismatch) {
         final List<RecursiveNode<T>> nodes = new ArrayList<>();
         if (continuation == null) {
             nodes.add(RecursiveNode.forRoot(RecordCursorStartContinuation.START, rootCursorFunction.apply(null)));
@@ -126,7 +130,7 @@ public final class RecursiveCursor<T> implements RecordCursor<RecursiveCursor.Re
                 }
             }
         }
-        return new RecursiveCursor<>(childCursorFunction, checkValueFunction, nodes, isPreorder);
+        return new RecursiveCursor<>(childCursorFunction, checkValueFunction, nodes, isPreorder, errorOnCheckMismatch);
     }
 
     @Nonnull
@@ -378,11 +382,16 @@ public final class RecursiveCursor<T> implements RecordCursor<RecursiveCursor.Re
             if (checkValueFunction != null && continuationChildNode.checkValue != null) {
                 final byte[] actualCheckValue = checkValueFunction.apply(value);
                 if (actualCheckValue != null && !Arrays.equals(continuationChildNode.checkValue, actualCheckValue)) {
-                    // Does not match; discard proposed continuation(s).
-                    while (nodes.size() > currentDepth) {
-                        nodes.remove(currentDepth);
+                    if (errorOnCheckMismatch) {
+                        throw new RecordCoreException("continuation integrity check failure");
+                    } else {
+                        System.out.println("hmm ... " + value + " does not match backtracking");
+                        // Does not match; discard proposed continuation(s).
+                        while (nodes.size() > currentDepth) {
+                            nodes.remove(currentDepth);
+                        }
+                        addNode = true;
                     }
-                    addNode = true;
                 }
             }
             if (!addNode) {

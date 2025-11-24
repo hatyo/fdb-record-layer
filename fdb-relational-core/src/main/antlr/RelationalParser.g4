@@ -345,11 +345,15 @@ query
     ;
 
 ctes
-    : WITH (RECURSIVE)? namedQuery (COMMA namedQuery)* traversalOrderClause?
+    : WITH (RECURSIVE)? namedQuery (COMMA namedQuery)* traversalOrderClause? checkClause?
     ;
 
 traversalOrderClause
     : TRAVERSAL ORDER order=(PRE_ORDER | LEVEL_ORDER | POST_ORDER)
+    ;
+
+checkClause
+    : WITH CHECK checkExpr=expression ON MISMATCH behavior=(ERROR | CONTINUE)
     ;
 
 namedQuery

@@ -27,6 +27,7 @@ import com.apple.foundationdb.record.RecordMetaData;
 import com.apple.foundationdb.record.RecordMetaDataBuilder;
 import com.apple.foundationdb.record.TestHierarchiesProto;
 import com.apple.foundationdb.record.provider.foundationdb.FDBRecordContext;
+import com.apple.foundationdb.record.provider.foundationdb.FDBRecordStoreBase;
 import com.apple.foundationdb.record.query.IndexQueryabilityFilter;
 import com.apple.foundationdb.record.query.expressions.Comparisons;
 import com.apple.foundationdb.record.query.plan.cascades.AccessHints;
@@ -82,10 +83,9 @@ import java.util.stream.Stream;
 
 import static com.apple.foundationdb.record.metadata.Key.Expressions.concat;
 import static com.apple.foundationdb.record.metadata.Key.Expressions.field;
-import static com.apple.foundationdb.record.query.plan.cascades.expressions.RecursiveUnionExpression.TraversalStrategy.ANY;
-import static com.apple.foundationdb.record.query.plan.cascades.expressions.RecursiveUnionExpression.TraversalStrategy.LEVEL;
-import static com.apple.foundationdb.record.query.plan.cascades.expressions.RecursiveUnionExpression.TraversalStrategy.POSTORDER;
-import static com.apple.foundationdb.record.query.plan.cascades.expressions.RecursiveUnionExpression.TraversalStrategy.PREORDER;
+import static com.apple.foundationdb.record.query.plan.cascades.expressions.RecursiveUnionExpression.TraversalStrategy.ofAnyOrder;
+import static com.apple.foundationdb.record.query.plan.cascades.expressions.RecursiveUnionExpression.TraversalStrategy.ofLevelOrder;
+import static com.apple.foundationdb.record.query.plan.cascades.expressions.RecursiveUnionExpression.TraversalStrategy.ofPostOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -99,14 +99,14 @@ class RecursiveQueriesTest extends TempTableTestBase {
 
     static Stream<Arguments> multiplesOfSuccessParameters() {
         return Stream.of(
-            Arguments.of(List.of(2L, 5L), 50L, LEVEL, List.of(2L, 5L, 4L, 10L, 8L, 20L, 16L, 40L, 32L)),
-            Arguments.of(List.of(2L, 5L), 50L, ANY, List.of(2L, 5L, 4L, 10L, 8L, 20L, 16L, 40L, 32L)),
-            Arguments.of(List.of(2L, 5L), 6L, LEVEL, List.of(2L, 5L, 4L)),
-            Arguments.of(List.of(2L, 5L), 6L, ANY, List.of(2L, 5L, 4L)),
-            Arguments.of(List.of(2L, 5L), 0L, LEVEL, List.of(2L, 5L)),
-            Arguments.of(List.of(2L, 5L), 0L, ANY, List.of(2L, 5L)),
-            Arguments.of(List.of(), 1000L, LEVEL, List.of()),
-            Arguments.of(List.of(), 1000L, ANY, List.of())
+            Arguments.of(List.of(2L, 5L), 50L, ofLevelOrder(), List.of(2L, 5L, 4L, 10L, 8L, 20L, 16L, 40L, 32L)),
+            Arguments.of(List.of(2L, 5L), 50L, ofAnyOrder(), List.of(2L, 5L, 4L, 10L, 8L, 20L, 16L, 40L, 32L)),
+            Arguments.of(List.of(2L, 5L), 6L, ofLevelOrder(), List.of(2L, 5L, 4L)),
+            Arguments.of(List.of(2L, 5L), 6L, ofAnyOrder(), List.of(2L, 5L, 4L)),
+            Arguments.of(List.of(2L, 5L), 0L, ofLevelOrder(), List.of(2L, 5L)),
+            Arguments.of(List.of(2L, 5L), 0L, ofAnyOrder(), List.of(2L, 5L)),
+            Arguments.of(List.of(), 1000L, ofLevelOrder(), List.of()),
+            Arguments.of(List.of(), 1000L, ofAnyOrder(), List.of())
         );
     }
 
@@ -126,7 +126,7 @@ class RecursiveQueriesTest extends TempTableTestBase {
         // PREORDER traversal is expected to fail because the constructed plan for calculating
         // multiplesOf is currently not matchable for the DFS implementation. We can implement
         // this if necessary, but for now this is not needed.
-        assertThrows(UnableToPlanException.class, () -> multiplesOf(List.of(2L, 5L), 50L, PREORDER));
+        assertThrows(UnableToPlanException.class, () -> multiplesOf(List.of(2L, 5L), 50L, RecursiveUnionExpression.TraversalStrategy.ofPreOrder()));
     }
 
     /**
@@ -195,17 +195,55 @@ class RecursiveQueriesTest extends TempTableTestBase {
                 .build();
     }
 
+    /**
+     * Other hierarchy, visually looking like the following.
+     * <pre>
+     * {@code
+     *                    0                                           15
+     *                 ┌─────┐
+     *                ┌┘     └┐
+     *               1         2
+     *            ┌──┴──┐   ┌──┴──┐
+     *           3      4   5      6
+     *         ┌─┴─┐  ┌─┴─┐ ┌─┴─┐  ┌─┴─┐
+     *         7   8  9  10 11 12  13 14
+     * }
+     * </pre>
+     * @return a hierarchy represented by a list of {@code child -> parent} edges.
+     */
+    @Nonnull
+    private static Map<Long, Long> otherForest() {
+        return ImmutableMap.<Long, Long>builder()
+                .put(0L, -1L)
+                .put(15L, -1L)
+                .put(1L, 0L)
+                .put(2L, 0L)
+                .put(3L, 1L)
+                .put(4L, 1L)
+                .put(5L, 2L)
+                .put(6L, 2L)
+                .put(7L, 3L)
+                .put(8L, 3L)
+                .put(9L, 4L)
+                .put(10L, 4L)
+                .put(11L, 5L)
+                .put(12L, 5L)
+                .put(13L, 6L)
+                .put(14L, 6L)
+                .build();
+    }
+
     static Stream<Arguments> ancestorsOfNodeParameters() {
         return Stream.of(
-            Arguments.of(ImmutableMap.of(250L, 50L), LEVEL, List.of(250L, 50L, 10L, 1L)),
-            Arguments.of(ImmutableMap.of(250L, 50L), PREORDER, List.of(250L, 50L, 10L, 1L)),
-            Arguments.of(ImmutableMap.of(250L, 50L), ANY, List.of(250L, 50L, 10L, 1L)),
-            Arguments.of(ImmutableMap.of(250L, 50L, 40L, 10L), LEVEL, List.of(250L, 40L, 50L, 10L, 10L, 1L, 1L)),
-            Arguments.of(ImmutableMap.of(250L, 50L, 40L, 10L), PREORDER, List.of(250L, 50L, 10L, 1L, 40L, 10L, 1L)),
-            Arguments.of(ImmutableMap.of(250L, 50L, 40L, 10L), ANY, List.of(250L, 50L, 10L, 1L, 40L, 10L, 1L)),
-            Arguments.of(ImmutableMap.of(300L, 300L), LEVEL, List.of(300L)),
-            Arguments.of(ImmutableMap.of(300L, 300L), PREORDER, List.of(300L)),
-            Arguments.of(ImmutableMap.of(300L, 300L), ANY, List.of(300L))
+            Arguments.of(ImmutableMap.of(250L, 50L), ofLevelOrder(), List.of(250L, 50L, 10L, 1L)),
+            Arguments.of(ImmutableMap.of(250L, 50L), RecursiveUnionExpression.TraversalStrategy.ofPreOrder(), List.of(250L, 50L, 10L, 1L)),
+            Arguments.of(ImmutableMap.of(250L, 50L), ofAnyOrder(), List.of(250L, 50L, 10L, 1L)),
+            Arguments.of(ImmutableMap.of(250L, 50L, 40L, 10L), ofLevelOrder(), List.of(250L, 40L, 50L, 10L, 10L, 1L, 1L)),
+            Arguments.of(ImmutableMap.of(250L, 50L, 40L, 10L), RecursiveUnionExpression.TraversalStrategy.ofPreOrder(), List.of(250L, 50L, 10L, 1L, 40L, 10L, 1L)),
+            Arguments.of(ImmutableMap.of(250L, 50L, 40L, 10L), ofAnyOrder(), List.of(250L, 50L, 10L, 1L, 40L, 10L, 1L)),
+            Arguments.of(ImmutableMap.of(300L, 300L), ofLevelOrder(), List.of(300L)),
+            Arguments.of(ImmutableMap.of(300L, 300L), RecursiveUnionExpression.TraversalStrategy.ofPreOrder(), List.of(300L)),
+            Arguments.of(ImmutableMap.of(300L, 300L), ofAnyOrder(), List.of(300L))
         );
     }
 
@@ -220,14 +258,14 @@ class RecursiveQueriesTest extends TempTableTestBase {
 
     static Stream<Arguments> descendantsOfNodeParameters() {
         return Stream.of(
-            Arguments.of(ImmutableMap.of(1L, -1L), LEVEL, List.of(1L, 10L, 20L, 40L, 50L, 70L, 100L, 210L, 250L)),
-            Arguments.of(ImmutableMap.of(1L, -1L), PREORDER, List.of(1L, 10L, 40L, 50L, 250L, 70L, 20L, 100L, 210L)),
-            Arguments.of(ImmutableMap.of(1L, -1L), POSTORDER, List.of(40L, 250L, 50L, 70L, 10L, 100L, 210L, 20L, 1L)),
-            Arguments.of(ImmutableMap.of(1L, -1L), ANY, List.of(1L, 10L, 40L, 50L, 250L, 70L, 20L, 100L, 210L)),
-            Arguments.of(ImmutableMap.of(10L, 1L), LEVEL, List.of(10L, 40L, 50L, 70L, 250L)),
-            Arguments.of(ImmutableMap.of(10L, 1L), PREORDER, List.of(10L, 40L, 50L, 250L, 70L)),
-            Arguments.of(ImmutableMap.of(10L, 1L), POSTORDER, List.of(40L, 250L, 50L, 70L, 10L)),
-            Arguments.of(ImmutableMap.of(10L, 1L), ANY, List.of(10L, 40L, 50L, 250L, 70L))
+            Arguments.of(ImmutableMap.of(1L, -1L), ofLevelOrder(), List.of(1L, 10L, 20L, 40L, 50L, 70L, 100L, 210L, 250L)),
+            Arguments.of(ImmutableMap.of(1L, -1L), RecursiveUnionExpression.TraversalStrategy.ofPreOrder(), List.of(1L, 10L, 40L, 50L, 250L, 70L, 20L, 100L, 210L)),
+            Arguments.of(ImmutableMap.of(1L, -1L), ofPostOrder(), List.of(40L, 250L, 50L, 70L, 10L, 100L, 210L, 20L, 1L)),
+            Arguments.of(ImmutableMap.of(1L, -1L), ofAnyOrder(), List.of(1L, 10L, 40L, 50L, 250L, 70L, 20L, 100L, 210L)),
+            Arguments.of(ImmutableMap.of(10L, 1L), ofLevelOrder(), List.of(10L, 40L, 50L, 70L, 250L)),
+            Arguments.of(ImmutableMap.of(10L, 1L), RecursiveUnionExpression.TraversalStrategy.ofPreOrder(), List.of(10L, 40L, 50L, 250L, 70L)),
+            Arguments.of(ImmutableMap.of(10L, 1L), ofPostOrder(), List.of(40L, 250L, 50L, 70L, 10L)),
+            Arguments.of(ImmutableMap.of(10L, 1L), ofAnyOrder(), List.of(10L, 40L, 50L, 250L, 70L))
         );
     }
 
@@ -242,15 +280,15 @@ class RecursiveQueriesTest extends TempTableTestBase {
 
     static Stream<Arguments> ancestorsOfNodeParametersAcrossContinuationParameters() {
         return Stream.of(
-            //Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, 2, 1), LEVEL, List.of(List.of(250L), List.of(50L, 10L), List.of(1L))),
-            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, 2, 1), PREORDER, List.of(List.of(250L), List.of(50L, 10L), List.of(1L))),
-            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, 2, 1), ANY, List.of(List.of(250L), List.of(50L, 10L), List.of(1L))),
-            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, 1, 2), LEVEL, List.of(List.of(250L), List.of(50L), List.of(10L, 1L))),
-            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, 1, 2), PREORDER, List.of(List.of(250L), List.of(50L), List.of(10L, 1L))),
-            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, 1, 2), ANY, List.of(List.of(250L), List.of(50L), List.of(10L, 1L))),
-            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, -1), LEVEL, List.of(List.of(250L), List.of(50L, 10L, 1L))),
-            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, -1), PREORDER, List.of(List.of(250L), List.of(50L, 10L, 1L))),
-            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, -1), ANY, List.of(List.of(250L), List.of(50L, 10L, 1L)))
+            //Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, 2, 1), ofLevelOrder(), List.of(List.of(250L), List.of(50L, 10L), List.of(1L))),
+            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, 2, 1), RecursiveUnionExpression.TraversalStrategy.ofPreOrder(), List.of(List.of(250L), List.of(50L, 10L), List.of(1L))),
+            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, 2, 1), ofAnyOrder(), List.of(List.of(250L), List.of(50L, 10L), List.of(1L))),
+            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, 1, 2), ofLevelOrder(), List.of(List.of(250L), List.of(50L), List.of(10L, 1L))),
+            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, 1, 2), RecursiveUnionExpression.TraversalStrategy.ofPreOrder(), List.of(List.of(250L), List.of(50L), List.of(10L, 1L))),
+            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, 1, 2), ofAnyOrder(), List.of(List.of(250L), List.of(50L), List.of(10L, 1L))),
+            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, -1), ofLevelOrder(), List.of(List.of(250L), List.of(50L, 10L, 1L))),
+            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, -1), RecursiveUnionExpression.TraversalStrategy.ofPreOrder(), List.of(List.of(250L), List.of(50L, 10L, 1L))),
+            Arguments.of(ImmutableMap.of(250L, 50L), List.of(1, -1), ofAnyOrder(), List.of(List.of(250L), List.of(50L, 10L, 1L)))
         );
     }
 
@@ -266,18 +304,18 @@ class RecursiveQueriesTest extends TempTableTestBase {
 
     static Stream<Arguments> descendantsOfNodeAcrossContinuationParameters() {
         return Stream.of(
-            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, -1), LEVEL, List.of(List.of(1L), List.of(10L, 20L, 40L, 50L, 70L, 100L, 210L, 250L))),
-            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, -1), PREORDER, List.of(List.of(1L), List.of(10L, 40L, 50L, 250L, 70L, 20L, 100L, 210L))),
-            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, -1), POSTORDER, List.of(List.of(40L), List.of(250L, 50L, 70L, 10L, 100L, 210L, 20L, 1L))),
-            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, -1), ANY, List.of(List.of(1L), List.of(10L, 40L, 50L, 250L, 70L, 20L, 100L, 210L))),
-            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, 2, 4, -1), LEVEL, List.of(List.of(1L), List.of(10L, 20L), List.of(40L, 50L, 70L, 100L), List.of(210L, 250L))),
-            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, 2, 4, -1), PREORDER, List.of(List.of(1L), List.of(10L, 40L), List.of(50L, 250L, 70L, 20L), List.of(100L, 210L))),
-            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, 2, 4, -1), POSTORDER, List.of(List.of(40L), List.of(250L, 50L), List.of(70L, 10L, 100L, 210L), List.of(20L, 1L))),
-            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, 2, 4, -1), ANY, List.of(List.of(1L), List.of(10L, 40L), List.of(50L, 250L, 70L, 20L), List.of(100L, 210L))),
-            Arguments.of(sampleForest(), ImmutableMap.of(1L, -1L, 500L, -1L), List.of(1, 2, 4, -1), LEVEL, List.of(List.of(1L), List.of(500L, 10L), List.of(20L, 510L, 520L, 40L), List.of(50L, 70L, 100L, 210L, 550L, 250L))),
-            Arguments.of(sampleForest(), ImmutableMap.of(1L, -1L, 500L, -1L), List.of(1, 2, 4, -1), PREORDER, List.of(List.of(1L), List.of(10L, 40L), List.of(50L, 250L, 70L, 20L), List.of(100L, 210L, 500L, 510L, 550L, 520L))),
-            Arguments.of(sampleForest(), ImmutableMap.of(1L, -1L, 500L, -1L), List.of(1, 2, 4, -1), POSTORDER, List.of(List.of(40L), List.of(250L, 50L), List.of(70L, 10L, 100L, 210L), List.of(20L, 1L, 550L, 510L, 520L, 500L))),
-            Arguments.of(sampleForest(), ImmutableMap.of(1L, -1L, 500L, -1L), List.of(1, 2, 4, -1), ANY, List.of(List.of(1L), List.of(10L, 40L), List.of(50L, 250L, 70L, 20L), List.of(100L, 210L, 500L, 510L, 550L, 520L)))
+            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, -1), ofLevelOrder(), List.of(List.of(1L), List.of(10L, 20L, 40L, 50L, 70L, 100L, 210L, 250L))),
+            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, -1), RecursiveUnionExpression.TraversalStrategy.ofPreOrder(), List.of(List.of(1L), List.of(10L, 40L, 50L, 250L, 70L, 20L, 100L, 210L))),
+            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, -1), ofPostOrder(), List.of(List.of(40L), List.of(250L, 50L, 70L, 10L, 100L, 210L, 20L, 1L))),
+            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, -1), ofAnyOrder(), List.of(List.of(1L), List.of(10L, 40L, 50L, 250L, 70L, 20L, 100L, 210L))),
+            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, 2, 4, -1), ofLevelOrder(), List.of(List.of(1L), List.of(10L, 20L), List.of(40L, 50L, 70L, 100L), List.of(210L, 250L))),
+            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, 2, 4, -1), RecursiveUnionExpression.TraversalStrategy.ofPreOrder(), List.of(List.of(1L), List.of(10L, 40L), List.of(50L, 250L, 70L, 20L), List.of(100L, 210L))),
+            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, 2, 4, -1), ofPostOrder(), List.of(List.of(40L), List.of(250L, 50L), List.of(70L, 10L, 100L, 210L), List.of(20L, 1L))),
+            Arguments.of(sampleHierarchy(), ImmutableMap.of(1L, -1L), List.of(1, 2, 4, -1), ofAnyOrder(), List.of(List.of(1L), List.of(10L, 40L), List.of(50L, 250L, 70L, 20L), List.of(100L, 210L))),
+            Arguments.of(sampleForest(), ImmutableMap.of(1L, -1L, 500L, -1L), List.of(1, 2, 4, -1), ofLevelOrder(), List.of(List.of(1L), List.of(500L, 10L), List.of(20L, 510L, 520L, 40L), List.of(50L, 70L, 100L, 210L, 550L, 250L))),
+            Arguments.of(sampleForest(), ImmutableMap.of(1L, -1L, 500L, -1L), List.of(1, 2, 4, -1), RecursiveUnionExpression.TraversalStrategy.ofPreOrder(), List.of(List.of(1L), List.of(10L, 40L), List.of(50L, 250L, 70L, 20L), List.of(100L, 210L, 500L, 510L, 550L, 520L))),
+            Arguments.of(sampleForest(), ImmutableMap.of(1L, -1L, 500L, -1L), List.of(1, 2, 4, -1), ofPostOrder(), List.of(List.of(40L), List.of(250L, 50L), List.of(70L, 10L, 100L, 210L), List.of(20L, 1L, 550L, 510L, 520L, 500L))),
+            Arguments.of(sampleForest(), ImmutableMap.of(1L, -1L, 500L, -1L), List.of(1, 2, 4, -1), ofAnyOrder(), List.of(List.of(1L), List.of(10L, 40L), List.of(50L, 250L, 70L, 20L), List.of(100L, 210L, 500L, 510L, 550L, 520L)))
         );
     }
 
@@ -291,6 +329,72 @@ class RecursiveQueriesTest extends TempTableTestBase {
         assertEquals(expectedResult, result);
     }
 
+    @DualPlannerTest(planner = DualPlannerTest.Planner.CASCADES)
+    void descendantsAcrossContinuationsAndChangingHierarchy() {
+        Assumptions.assumeTrue(isUseCascadesPlanner());
+        final ImmutableList.Builder<List<Long>> resultBuilder = ImmutableList.builder();
+        final BiFunction<Quantifier.ForEach, Quantifier.ForEach, QueryPredicate> predicate = (hierarchyScanQun, ttSelectQun) -> {
+            final var idField = getIdField(ttSelectQun);
+            final var parentField = getParentField(hierarchyScanQun);
+            return new ValuePredicate(parentField, new Comparisons.ValueComparison(Comparisons.Type.EQUALS, idField));
+        };
+        /*
+         * BEFORE (initial otherForest hierarchy):
+         *
+         *          0                                  15
+         *       ┌─────┐                              (isolated root)
+         *      ┌┘     └┐
+         *     1         2
+         *  ┌──┴──┐   ┌──┴──┐
+         * 3      4   5      6
+         * ┌─┴─┐ ┌─┴─┐ ┌─┴─┐ ┌─┴─┐
+         * 7   8 9  10 11 12 13 14
+         */
+        final var hierarchy = otherForest();
+        final var initial = Map.of(0L, -1L);
+        try (FDBRecordContext context = openContext()) {
+            var executionTimesMs =  ImmutableList.<Long>builder();
+            var continuations = ImmutableList.<byte[]>builder();
+            var executionResult = hierarchicalQuery(hierarchy, initial, predicate, context, null, 3, RecursiveUnionExpression.TraversalStrategy.ofPreOrder());
+            executionTimesMs.add(executionResult.getExecutionTimeMillis());
+            continuations.add(new byte[]{});
+            final var originalPlan = executionResult.getPlan();
+            final RecordQueryPlan plan = verifySerialization(originalPlan);
+            var continuation = executionResult.getContinuation();
+            resultBuilder.add(executionResult.getExecutionResult());
+
+            /*
+             * AFTER (moving node 1 to be child of 15):
+             *
+             *          0              15
+             *          │              │
+             *          2              1
+             *       ┌──┴──┐        ┌──┴──┐
+             *      5      6       3      4
+             *    ┌─┴─┐  ┌─┴─┐   ┌─┴─┐  ┌─┴─┐
+             *   11 12  13 14    7   8  9  10
+             *
+             * Node 1 (and its entire subtree: 3, 4, 7, 8, 9, 10) moves from under node 0 to under node 15.
+             */
+            {
+                final var message = item(1L, 15L);
+                recordStore.saveRecord(message, FDBRecordStoreBase.RecordExistenceCheck.NONE);
+            }
+
+            final var seedingTempTableAlias = CorrelationIdentifier.of("Seeding");
+            final var seedingTempTable = tempTableInstance();
+            initial.forEach((id, parent) -> seedingTempTable.add(queryResult(id, parent)));
+            var evaluationContext = setUpPlanContext(plan, seedingTempTableAlias, seedingTempTable);
+            timer.reset();
+            executionResult = executeHierarchyPlan(plan, continuation, evaluationContext, -1);
+            executionTimesMs.add(executionResult.getExecutionTimeMillis());
+            continuations.add(continuation == null ? new byte[]{} : continuation);
+            continuation = executionResult.getContinuation();
+            resultBuilder.add(Objects.requireNonNull(executionResult.getExecutionResult()));
+            System.out.println("execution result: " + executionResult.getExecutionResult());
+        }
+    }
+
     @Nonnull
     static Stream<Arguments> randomizedDescendantsTestParameters() {
         final int maxChildrenCountPerLevel = 1000;
@@ -300,9 +404,9 @@ class RecursiveQueriesTest extends TempTableTestBase {
         final var randomHierarchy = Hierarchy.generateRandomHierarchy(maxChildrenCountPerLevel, maxDepth, effectiveParentsCount);
         final var splits = ListPartitioner.getSplitsUsingNormalDistribution(continuationsCount, randomHierarchy.size());
         return Stream.of(
-            Arguments.of(randomHierarchy, LEVEL, splits),
-            Arguments.of(randomHierarchy, PREORDER, splits),
-            Arguments.of(randomHierarchy, POSTORDER, splits)
+            Arguments.of(randomHierarchy, ofLevelOrder(), splits),
+            Arguments.of(randomHierarchy, RecursiveUnionExpression.TraversalStrategy.ofPreOrder(), splits),
+            Arguments.of(randomHierarchy, ofPostOrder(), splits)
         );
     }
 
@@ -334,10 +438,10 @@ class RecursiveQueriesTest extends TempTableTestBase {
         Collections.reverse(reversedAncestors);
         final var splits = ListPartitioner.getSplitsUsingNormalDistribution(continuationsCount, randomHierarchy.size());
         return Stream.of(
-            Arguments.of(randomHierarchy, leaf, parent, ancestors, splits, LEVEL),
-            Arguments.of(randomHierarchy, leaf, parent, ancestors, splits, PREORDER),
-            Arguments.of(randomHierarchy, leaf, parent, reversedAncestors, splits, POSTORDER),
-            Arguments.of(randomHierarchy, leaf, parent, ancestors, splits, ANY)
+            Arguments.of(randomHierarchy, leaf, parent, ancestors, splits, ofLevelOrder()),
+            Arguments.of(randomHierarchy, leaf, parent, ancestors, splits, RecursiveUnionExpression.TraversalStrategy.ofPreOrder()),
+            Arguments.of(randomHierarchy, leaf, parent, reversedAncestors, splits, ofPostOrder()),
+            Arguments.of(randomHierarchy, leaf, parent, ancestors, splits, ofAnyOrder())
         );
     }
 
@@ -357,9 +461,9 @@ class RecursiveQueriesTest extends TempTableTestBase {
     @DualPlannerTest(planner = DualPlannerTest.Planner.CASCADES)
     void testRecursivePlanEquality() {
         Assumptions.assumeTrue(isUseCascadesPlanner());
-        final var plan1 = ancestorsPlan(PREORDER);
+        final var plan1 = ancestorsPlan(RecursiveUnionExpression.TraversalStrategy.ofPreOrder());
         assertInstanceOf(RecordQueryRecursiveDfsJoinPlan.class, plan1);
-        final var plan2 = ancestorsPlan(PREORDER);
+        final var plan2 = ancestorsPlan(RecursiveUnionExpression.TraversalStrategy.ofPreOrder());
         assertInstanceOf(RecordQueryRecursiveDfsJoinPlan.class, plan2);
         assertEquals(plan1.hashCode(), plan2.hashCode());
         assertEquals(plan1, plan2);
@@ -380,19 +484,19 @@ class RecursiveQueriesTest extends TempTableTestBase {
         final var seedingAlias = CorrelationIdentifier.of("seeding");
         final var insertAlias = CorrelationIdentifier.of("insert");
         final var scanAlias = CorrelationIdentifier.of("scan");
-        final var expression1 = getRecursiveUnionExpression(seedingAlias, insertAlias, scanAlias, predicate, PREORDER);
+        final var expression1 = getRecursiveUnionExpression(seedingAlias, insertAlias, scanAlias, predicate, RecursiveUnionExpression.TraversalStrategy.ofPreOrder());
         assertTrue(expression1.equalsWithoutChildren(expression1, AliasMap.emptyMap()));
-        final var expression2 = getRecursiveUnionExpression(seedingAlias, insertAlias, scanAlias, predicate, PREORDER);
+        final var expression2 = getRecursiveUnionExpression(seedingAlias, insertAlias, scanAlias, predicate, RecursiveUnionExpression.TraversalStrategy.ofPreOrder());
         assertTrue(expression1.equalsWithoutChildren(expression2, AliasMap.emptyMap()));
         final var otherSeedingAlias = CorrelationIdentifier.of("otherSeeding");
         final var otherInsertAlias = CorrelationIdentifier.of("otherInsert");
         final var otherScanAlias = CorrelationIdentifier.of("otherScan");
-        final var expression3 = getRecursiveUnionExpression(otherSeedingAlias, otherInsertAlias, otherScanAlias, predicate, PREORDER);
+        final var expression3 = getRecursiveUnionExpression(otherSeedingAlias, otherInsertAlias, otherScanAlias, predicate, RecursiveUnionExpression.TraversalStrategy.ofPreOrder());
         assertFalse(expression1.equalsWithoutChildren(expression3, AliasMap.emptyMap()));
         assertTrue(expression1.equalsWithoutChildren(expression3, AliasMap.ofAliases(seedingAlias, otherSeedingAlias)
                 .combine(AliasMap.ofAliases(insertAlias, otherInsertAlias)
                         .combine(AliasMap.ofAliases(scanAlias, otherScanAlias)))));
-        final var expression4 = getRecursiveUnionExpression(seedingAlias, insertAlias, scanAlias, predicate, LEVEL);
+        final var expression4 = getRecursiveUnionExpression(seedingAlias, insertAlias, scanAlias, predicate, ofLevelOrder());
         assertFalse(expression1.equalsWithoutChildren(expression4, AliasMap.emptyMap()));
     }
 

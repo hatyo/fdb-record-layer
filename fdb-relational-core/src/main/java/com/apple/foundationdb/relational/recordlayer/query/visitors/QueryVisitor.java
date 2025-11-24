@@ -118,22 +118,35 @@ public final class QueryVisitor extends DelegatingVisitor<BaseVisitor> {
     @Override
     public LogicalOperators visitCtes(@Nonnull RelationalParser.CtesContext ctx) {
         if (ctx.RECURSIVE() != null) {
-            final RecursiveUnionExpression.TraversalStrategy traversalStrategy;
+            RecursiveUnionExpression.TraversalStrategy traversalStrategy;
+            @Nullable Value checkValue = null;
+            boolean errorOnMismatch = false;
+            if (ctx.checkClause() != null) {
+                final var checkClause = ctx.checkClause();
+                errorOnMismatch = checkClause.ERROR() != null;
+                // todo: run checks on the check value (should be scalar, only reference fields from the outer select.
+                checkValue = Assert.castUnchecked(checkClause.checkExpr.accept(this), Expression.class).getUnderlying();
+            }
+
             if (ctx.traversalOrderClause() != null) {
                 final var order = ctx.traversalOrderClause();
                 if (order.LEVEL_ORDER() != null) {
-                    traversalStrategy = RecursiveUnionExpression.TraversalStrategy.LEVEL;
+                    Assert.isNullUnchecked(checkValue, "checking continuation integrity is not supported in level-based traversal");
+                    traversalStrategy = RecursiveUnionExpression.TraversalStrategy.ofLevelOrder();
                 } else if (order.PRE_ORDER() != null) {
-                    traversalStrategy = RecursiveUnionExpression.TraversalStrategy.PREORDER;
+                    traversalStrategy = RecursiveUnionExpression.TraversalStrategy.ofPreOrderWithCheck(checkValue, errorOnMismatch);
                 } else if (order.POST_ORDER() != null) {
-                    traversalStrategy = RecursiveUnionExpression.TraversalStrategy.POSTORDER;
+                    traversalStrategy = RecursiveUnionExpression.TraversalStrategy.ofPostOrderWithCheck(checkValue, errorOnMismatch);
                 } else {
-                    traversalStrategy = RecursiveUnionExpression.TraversalStrategy.ANY;
+                    traversalStrategy = RecursiveUnionExpression.TraversalStrategy.ofAnyOrder(); // make compiler happy.
                     Assert.failUnchecked(ErrorCode.INTERNAL_ERROR, "Unsupported traversal " + order.getText());
                 }
             } else {
-                traversalStrategy = RecursiveUnionExpression.TraversalStrategy.ANY;
+                // todo: this can be done by the optimizer, not now.
+                Assert.isNullUnchecked(checkValue, "checking continuation integrity must be defined with a DFS strategy");
+                traversalStrategy = RecursiveUnionExpression.TraversalStrategy.ofAnyOrder();
             }
+
             return LogicalOperators.of(ctx.namedQuery().stream().map(namedQuery -> handleRecursiveNamedQuery(namedQuery, traversalStrategy)).collect(ImmutableList.toImmutableList()));
         } else {
             Assert.thatUnchecked(ctx.traversalOrderClause() == null, ErrorCode.SYNTAX_ERROR, "traversal order clause can only be defined with recursive CTE");

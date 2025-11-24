@@ -153,16 +153,16 @@ public class ImplementRecursiveDfsJoinRule extends ImplementationCascadesRule<Re
                 recursiveInnerSelect.getPredicates(), innerRef, innerQun, innerPlanPartition).reference();
         final var recursiveQun = Quantifier.physical(recursivePlanRef, recursiveStateAlias);
 
-        final var dfsTraversalStrategy = getDfsTraversalStrategy(recursiveUnionExpression);
-
-        call.yieldPlan(new RecordQueryRecursiveDfsJoinPlan(rootQun, recursiveQun, priorValueCorrelation, dfsTraversalStrategy));
+        final var traversalBehavior = getTraversalBehavior(recursiveUnionExpression);
+        final var isPreorder = recursiveUnionExpression.getTraversalStrategy().getTraversalOrder() == RecursiveUnionExpression.TraversalOrder.PREORDER;
+        call.yieldPlan(new RecordQueryRecursiveDfsJoinPlan(rootQun, recursiveQun, priorValueCorrelation, isPreorder, traversalBehavior));
     }
 
     /**
      * Determines the DFS traversal strategy to use for recursive query execution based on the
      * {@link RecursiveUnionExpression}'s traversal strategy specification.
      *
-     * <p>When the recursive union expression allows {@link RecursiveUnionExpression.TraversalStrategy#ANY}
+     * <p>When the recursive union expression allows {@link RecursiveUnionExpression.TraversalOrder#ANY}
      * traversal (meaning no specific order is required), this method gives precedence to PRE_ORDER over
      * POST_ORDER. This choice is deliberate and based on the following considerations:
      *
@@ -181,22 +181,19 @@ public class ImplementRecursiveDfsJoinRule extends ImplementationCascadesRule<Re
      *   <li>POST_ORDER if {@code postOrderTraversalAllowed()} returns true</li>
      * </ol>
      *
-     * <p>Note that when {@link RecursiveUnionExpression.TraversalStrategy#ANY} is specified, both
+     * <p>Note that when {@link RecursiveUnionExpression.TraversalOrder#ANY} is specified, both
      * {@code preOrderTraversalAllowed()} and {@code postOrderTraversalAllowed()} return true, so
      * PRE_ORDER will be selected due to the order of the checks.
      *
      * @param recursiveUnionExpression the recursive union expression specifying the traversal requirements
      * @return the DFS traversal strategy to use for query execution
      * @throws RecordCoreException if the recursive union expression specifies a non-DFS traversal strategy
-     *         (e.g., {@link RecursiveUnionExpression.TraversalStrategy#LEVEL})
+     *         (e.g., {@link RecursiveUnionExpression.TraversalOrder#LEVEL})
      */
     @Nonnull
-    private static RecordQueryRecursiveDfsJoinPlan.DfsTraversalStrategy getDfsTraversalStrategy(@Nonnull RecursiveUnionExpression recursiveUnionExpression) {
-        if (recursiveUnionExpression.preOrderTraversalAllowed()) {
-            return RecordQueryRecursiveDfsJoinPlan.DfsTraversalStrategy.PREORDER;
-        }
-        if (recursiveUnionExpression.postOrderTraversalAllowed()) {
-            return RecordQueryRecursiveDfsJoinPlan.DfsTraversalStrategy.POSTORDER;
+    private static RecursiveUnionExpression.TraversalStrategy.TraversalBehavior getTraversalBehavior(@Nonnull final RecursiveUnionExpression recursiveUnionExpression) {
+        if (recursiveUnionExpression.preOrderTraversalAllowed() || recursiveUnionExpression.postOrderTraversalAllowed()) {
+            return recursiveUnionExpression.getTraversalStrategy().getTraversalBehavior();
         }
         throw new RecordCoreException("unexpected non-dfs traversal");
     }

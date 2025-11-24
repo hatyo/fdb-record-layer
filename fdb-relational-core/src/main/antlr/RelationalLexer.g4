@@ -574,6 +574,7 @@ MESSAGE_TEXT:                        'MESSAGE_TEXT';
 MID:                                 'MID';
 MIGRATE:                             'MIGRATE';
 MIN_ROWS:                            'MIN_ROWS';
+MISMATCH:                            'MISMATCH';
 MODE:                                'MODE';
 MODIFY:                              'MODIFY';
 MUTEX:                               'MUTEX';

@@ -253,6 +253,9 @@ public interface TypedVisitor extends RelationalParserVisitor<Object> {
     @Override
     LogicalOperators visitCtes(RelationalParser.CtesContext ctx);
 
+    @Override
+    Object visitCheckClause(RelationalParser.CheckClauseContext ctx);
+
     @Nonnull
     @Override
     LogicalOperator visitNamedQuery(RelationalParser.NamedQueryContext ctx);

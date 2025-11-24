@@ -213,9 +213,9 @@ public class DelegatingVisitorTest {
             public Object visitTraversalOrderClause(final RelationalParser.TraversalOrderClauseContext ctx) {
                 baseVisitorCalled.setTrue();
                 if (query.equals("TRAVERSAL ORDER LEVEL_ORDER")) {
-                    return RecursiveUnionExpression.TraversalStrategy.LEVEL;
+                    return RecursiveUnionExpression.TraversalOrder.LEVEL;
                 } else {
-                    return RecursiveUnionExpression.TraversalStrategy.PREORDER;
+                    return RecursiveUnionExpression.TraversalOrder.PREORDER;
                 }
             }
         };

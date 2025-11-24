@@ -183,6 +183,14 @@ public class QueryResult implements ProtoSerializable {
         return new QueryResult(computed, queriedRecord, primaryKey);
     }
 
+    @Override
+    public String toString() {
+        if (datum != null) {
+            return datum.toString();
+        }
+        return super.toString();
+    }
+
     @Nonnull
     public static QueryResult from(@Nullable final Descriptors.Descriptor descriptor, @Nonnull final PQueryResult parsed) {
         try {

@@ -28,11 +28,11 @@ import com.apple.foundationdb.record.ObjectPlanHash;
 import com.apple.foundationdb.record.PlanDeserializer;
 import com.apple.foundationdb.record.PlanHashable;
 import com.apple.foundationdb.record.PlanSerializationContext;
-import com.apple.foundationdb.record.RecordCoreException;
 import com.apple.foundationdb.record.RecordCursor;
 import com.apple.foundationdb.record.cursors.RecursiveCursor;
 import com.apple.foundationdb.record.planprotos.PRecordQueryPlan;
 import com.apple.foundationdb.record.planprotos.PRecordQueryRecursiveDfsJoinPlan;
+import com.apple.foundationdb.record.planprotos.PRecordQueryRecursiveDfsJoinPlan.PDfsTraversalStrategy;
 import com.apple.foundationdb.record.provider.common.StoreTimer;
 import com.apple.foundationdb.record.provider.foundationdb.FDBRecordStoreBase;
 import com.apple.foundationdb.record.query.plan.AvailableFields;
@@ -45,6 +45,7 @@ import com.apple.foundationdb.record.query.plan.cascades.explain.ExplainPlanVisi
 import com.apple.foundationdb.record.query.plan.cascades.explain.NodeInfo;
 import com.apple.foundationdb.record.query.plan.cascades.explain.PlannerGraph;
 import com.apple.foundationdb.record.query.plan.cascades.expressions.AbstractRelationalExpressionWithChildren;
+import com.apple.foundationdb.record.query.plan.cascades.expressions.RecursiveUnionExpression;
 import com.apple.foundationdb.record.query.plan.cascades.expressions.RelationalExpression;
 import com.apple.foundationdb.record.query.plan.cascades.values.Value;
 import com.apple.foundationdb.record.query.plan.cascades.values.translation.TranslationMap;
@@ -69,26 +70,6 @@ import java.util.Set;
 public class RecordQueryRecursiveDfsJoinPlan extends AbstractRelationalExpressionWithChildren implements RecordQueryPlanWithChildren {
     private static final ObjectPlanHash BASE_HASH = new ObjectPlanHash("Record-Query-Recursive-Plan");
 
-    /**
-     * Defines the depth-first search (DFS) traversal order for recursive queries.
-     * <ul>
-     *   <li>{@link #PREORDER}: Emit each node before processing its descendants (parent-first)</li>
-     *   <li>{@link #POSTORDER}: Emit each node after processing its descendants (children-first)</li>
-     * </ul>
-     */
-    public enum DfsTraversalStrategy {
-        /**
-         * Pre-order traversal: visit and emit the current node, then recursively process all descendants.
-         * Results in parent nodes appearing before their children in the output.
-         */
-        PREORDER,
-        /**
-         * Post-order traversal: recursively process all descendants first, then visit and emit the current node.
-         * Results in child nodes appearing before their parents in the output.
-         */
-        POSTORDER
-    }
-
     @Nonnull
     private final Quantifier.Physical rootQuantifier;
     @Nonnull
@@ -97,17 +78,20 @@ public class RecordQueryRecursiveDfsJoinPlan extends AbstractRelationalExpressio
     private final CorrelationIdentifier priorValueCorrelation;
     @Nonnull
     private final Value resultValue;
+    private final boolean isPreorder;
     @Nonnull
-    private final DfsTraversalStrategy dfsTraversalStrategy;
+    private final RecursiveUnionExpression.TraversalStrategy.TraversalBehavior traversalBehavior;
 
     public RecordQueryRecursiveDfsJoinPlan(@Nonnull final Quantifier.Physical rootQuantifier,
                                            @Nonnull final Quantifier.Physical childQuantifier,
                                            @Nonnull final CorrelationIdentifier priorValueCorrelation,
-                                           @Nonnull final DfsTraversalStrategy dfsTraversalStrategy) {
+                                           final boolean isPreorder,
+                                           @Nonnull final RecursiveUnionExpression.TraversalStrategy.TraversalBehavior traversalBehavior) {
         this.rootQuantifier = rootQuantifier;
         this.childQuantifier = childQuantifier;
         this.priorValueCorrelation = priorValueCorrelation;
-        this.dfsTraversalStrategy = dfsTraversalStrategy;
+        this.isPreorder = isPreorder;
+        this.traversalBehavior = traversalBehavior;
         this.resultValue = RecordQuerySetPlan.mergeValues(ImmutableList.of(rootQuantifier, childQuantifier));
     }
 
@@ -138,9 +122,15 @@ public class RecordQueryRecursiveDfsJoinPlan extends AbstractRelationalExpressio
                             final EvaluationContext childContext = context.withBinding(Bindings.Internal.CORRELATION.bindingName(priorValueCorrelation.getId()), parentResult);
                             return childQuantifier.getRangesOverPlan().executePlan(store, childContext, innerContinuation, nestedExecuteProperties);
                         },
-                        null,
+                        traversalBehavior.isNoCheck() ? null :
+                            queryResult -> {
+                                final var childContext = context.withBinding(Bindings.Internal.CORRELATION.bindingName(priorValueCorrelation.getId()), queryResult);
+                                final var value = (Message)traversalBehavior.getCheckFunction().eval(store, childContext);
+                                return value == null ? null : value.toByteString().toByteArray();
+                            },
                         continuation,
-                        dfsTraversalStrategy == DfsTraversalStrategy.PREORDER
+                        isPreorder,
+                        traversalBehavior.isErrorOnMismatch()
                 ).skipThenLimit(executeProperties.getSkip(), executeProperties.getReturnedRowLimit())
                 .map(RecursiveCursor.RecursiveValue::getValue);
     }
@@ -195,6 +185,10 @@ public class RecordQueryRecursiveDfsJoinPlan extends AbstractRelationalExpressio
         return true;
     }
 
+    public boolean isPreorder() {
+        return isPreorder;
+    }
+
     @Nonnull
     @Override
     public Value getResultValue() {
@@ -202,8 +196,8 @@ public class RecordQueryRecursiveDfsJoinPlan extends AbstractRelationalExpressio
     }
 
     @Nonnull
-    public DfsTraversalStrategy getDfsTraversalStrategy() {
-        return dfsTraversalStrategy;
+    public RecursiveUnionExpression.TraversalStrategy.TraversalBehavior getTraversalBehavior() {
+        return traversalBehavior;
     }
 
     @Nonnull
@@ -300,7 +294,8 @@ public class RecordQueryRecursiveDfsJoinPlan extends AbstractRelationalExpressio
                 translatedQuantifiers.get(0).narrow(Quantifier.Physical.class),
                 translatedQuantifiers.get(1).narrow(Quantifier.Physical.class),
                 priorValueCorrelation,
-                dfsTraversalStrategy
+                isPreorder,
+                traversalBehavior
         );
     }
 
@@ -349,31 +344,29 @@ public class RecordQueryRecursiveDfsJoinPlan extends AbstractRelationalExpressio
                 .setRootQuantifier(rootQuantifier.toProto(serializationContext))
                 .setChildQuantifier(childQuantifier.toProto(serializationContext))
                 .setPriorValueCorrelation(priorValueCorrelation.getId())
-                .setDfsTraversalStrategy(toProto(dfsTraversalStrategy))
+                .setTraversalBehavior(toProto(traversalBehavior, serializationContext))
                 .build();
     }
 
     @Nonnull
-    private static PRecordQueryRecursiveDfsJoinPlan.PDfsTraversalStrategy toProto(@Nonnull final DfsTraversalStrategy dfsTraversalStrategy) {
-        switch (dfsTraversalStrategy) {
-            case PREORDER:
-                return PRecordQueryRecursiveDfsJoinPlan.PDfsTraversalStrategy.PRE_ORDER;
-            case POSTORDER:
-                return PRecordQueryRecursiveDfsJoinPlan.PDfsTraversalStrategy.POST_ORDER;
-            default:
-                throw new RecordCoreException("Unknown traversal strategy " + dfsTraversalStrategy.name());
+    private static PRecordQueryRecursiveDfsJoinPlan.PTraversalBehavior toProto(@Nonnull final RecursiveUnionExpression.TraversalStrategy.TraversalBehavior traversalBehavior,
+                                                                               @Nonnull final PlanSerializationContext serializationContext) {
+        final var builder = PRecordQueryRecursiveDfsJoinPlan.PTraversalBehavior.newBuilder();
+        if (traversalBehavior.isNoCheck()) {
+            return builder.build();
         }
+        return builder.setErrorOnMismatch(traversalBehavior.isErrorOnMismatch())
+                .setCheckValue(traversalBehavior.getCheckFunction().toValueProto(serializationContext)).build();
     }
 
     @Nonnull
-    private static DfsTraversalStrategy fromProto(@Nonnull final PRecordQueryRecursiveDfsJoinPlan.PDfsTraversalStrategy dfsTraversalStrategyProto) {
-        switch (dfsTraversalStrategyProto) {
-            case PRE_ORDER:
-                return DfsTraversalStrategy.PREORDER;
-            case POST_ORDER:
-                return DfsTraversalStrategy.POSTORDER;
-            default:
-                throw new RecordCoreException("Unknown traversal strategy " + dfsTraversalStrategyProto.name());
+    private static RecursiveUnionExpression.TraversalStrategy.TraversalBehavior fromProto(@Nonnull final PRecordQueryRecursiveDfsJoinPlan.PTraversalBehavior traversalBehavior,
+                                                                                          @Nonnull final PlanSerializationContext serializationContext) {
+        if (traversalBehavior.hasCheckValue()) {
+            return RecursiveUnionExpression.TraversalStrategy.TraversalBehavior.check(Value.fromValueProto(serializationContext, traversalBehavior.getCheckValue()),
+                    traversalBehavior.getErrorOnMismatch());
+        } else {
+            return RecursiveUnionExpression.TraversalStrategy.TraversalBehavior.noCheck();
         }
     }
 
@@ -384,14 +377,17 @@ public class RecordQueryRecursiveDfsJoinPlan extends AbstractRelationalExpressio
     }
 
     @Nonnull
+    @SuppressWarnings("deprecation") // to maintain backward-compatibility
     public static RecordQueryRecursiveDfsJoinPlan fromProto(@Nonnull final PlanSerializationContext serializationContext,
                                                             @Nonnull final PRecordQueryRecursiveDfsJoinPlan recordQueryRecursivePlanProto) {
+        final boolean isPreorder = recordQueryRecursivePlanProto.getDfsTraversalStrategy().getNumber() == PDfsTraversalStrategy.PRE_ORDER_VALUE;
+        RecursiveUnionExpression.TraversalStrategy.TraversalBehavior traversalBehavior = fromProto(recordQueryRecursivePlanProto.getTraversalBehavior(), serializationContext);
         return new RecordQueryRecursiveDfsJoinPlan(
                 Quantifier.Physical.fromProto(serializationContext, Objects.requireNonNull(recordQueryRecursivePlanProto.getRootQuantifier())),
                 Quantifier.Physical.fromProto(serializationContext, Objects.requireNonNull(recordQueryRecursivePlanProto.getChildQuantifier())),
                 CorrelationIdentifier.of(Objects.requireNonNull(recordQueryRecursivePlanProto.getPriorValueCorrelation())),
-                fromProto(recordQueryRecursivePlanProto.getDfsTraversalStrategy())
-        );
+                isPreorder,
+                traversalBehavior);
     }
 
     @Nonnull
