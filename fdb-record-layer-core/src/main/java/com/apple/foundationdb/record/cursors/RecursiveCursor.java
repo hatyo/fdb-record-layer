@@ -376,16 +376,17 @@ public final class RecursiveCursor<T> implements RecordCursor<RecursiveCursor.Re
     private void addChildNode(@Nullable T value) {
         currentDepth++;
         if (currentDepth < nodes.size()) {
+            System.out.println("adding " + value + " to stack");
             // Have a nested continuation.
             final RecursiveNode<T> continuationChildNode = nodes.get(currentDepth);
             boolean addNode = false;
             if (checkValueFunction != null && continuationChildNode.checkValue != null) {
                 final byte[] actualCheckValue = checkValueFunction.apply(value);
                 if (actualCheckValue != null && !Arrays.equals(continuationChildNode.checkValue, actualCheckValue)) {
+                    System.out.println("change detected!");
                     if (errorOnCheckMismatch) {
                         throw new RecordCoreException("continuation integrity check failure");
                     } else {
-                        System.out.println("hmm ... " + value + " does not match backtracking");
                         // Does not match; discard proposed continuation(s).
                         while (nodes.size() > currentDepth) {
                             nodes.remove(currentDepth);

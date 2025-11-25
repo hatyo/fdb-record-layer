@@ -118,36 +118,25 @@ public final class QueryVisitor extends DelegatingVisitor<BaseVisitor> {
     @Override
     public LogicalOperators visitCtes(@Nonnull RelationalParser.CtesContext ctx) {
         if (ctx.RECURSIVE() != null) {
-            RecursiveUnionExpression.TraversalStrategy traversalStrategy;
-            @Nullable Value checkValue = null;
-            boolean errorOnMismatch = false;
-            if (ctx.checkClause() != null) {
-                final var checkClause = ctx.checkClause();
-                errorOnMismatch = checkClause.ERROR() != null;
-                // todo: run checks on the check value (should be scalar, only reference fields from the outer select.
-                checkValue = Assert.castUnchecked(checkClause.checkExpr.accept(this), Expression.class).getUnderlying();
-            }
-
+            final RecursiveUnionExpression.TraversalOrder traversalOrder;
             if (ctx.traversalOrderClause() != null) {
                 final var order = ctx.traversalOrderClause();
                 if (order.LEVEL_ORDER() != null) {
-                    Assert.isNullUnchecked(checkValue, "checking continuation integrity is not supported in level-based traversal");
-                    traversalStrategy = RecursiveUnionExpression.TraversalStrategy.ofLevelOrder();
+                    traversalOrder = RecursiveUnionExpression.TraversalOrder.LEVEL;
                 } else if (order.PRE_ORDER() != null) {
-                    traversalStrategy = RecursiveUnionExpression.TraversalStrategy.ofPreOrderWithCheck(checkValue, errorOnMismatch);
+                    traversalOrder = RecursiveUnionExpression.TraversalOrder.PREORDER;
                 } else if (order.POST_ORDER() != null) {
-                    traversalStrategy = RecursiveUnionExpression.TraversalStrategy.ofPostOrderWithCheck(checkValue, errorOnMismatch);
+                    traversalOrder = RecursiveUnionExpression.TraversalOrder.POSTORDER;
                 } else {
-                    traversalStrategy = RecursiveUnionExpression.TraversalStrategy.ofAnyOrder(); // make compiler happy.
                     Assert.failUnchecked(ErrorCode.INTERNAL_ERROR, "Unsupported traversal " + order.getText());
+                    traversalOrder = RecursiveUnionExpression.TraversalOrder.ANY;
                 }
             } else {
-                // todo: this can be done by the optimizer, not now.
-                Assert.isNullUnchecked(checkValue, "checking continuation integrity must be defined with a DFS strategy");
-                traversalStrategy = RecursiveUnionExpression.TraversalStrategy.ofAnyOrder();
+                traversalOrder = RecursiveUnionExpression.TraversalOrder.ANY;
             }
 
-            return LogicalOperators.of(ctx.namedQuery().stream().map(namedQuery -> handleRecursiveNamedQuery(namedQuery, traversalStrategy)).collect(ImmutableList.toImmutableList()));
+            return LogicalOperators.of(ctx.namedQuery().stream().map(namedQuery ->
+                    handleRecursiveNamedQuery(namedQuery, traversalOrder, ctx.checkClause())).collect(ImmutableList.toImmutableList()));
         } else {
             Assert.thatUnchecked(ctx.traversalOrderClause() == null, ErrorCode.SYNTAX_ERROR, "traversal order clause can only be defined with recursive CTE");
         }
@@ -174,7 +163,8 @@ public final class QueryVisitor extends DelegatingVisitor<BaseVisitor> {
     @SuppressWarnings("UnstableApiUsage")
     @Nonnull
     public LogicalOperator handleRecursiveNamedQuery(@Nonnull final RelationalParser.NamedQueryContext recursiveQueryContext,
-                                                     @Nonnull final RecursiveUnionExpression.TraversalStrategy traversalStrategy) {
+                                                     @Nonnull final RecursiveUnionExpression.TraversalOrder traversalOrder,
+                                                     @Nullable final RelationalParser.CheckClauseContext checkClause) {
         final var queryName = visitFullId(recursiveQueryContext.name);
         final Optional<Type> recursiveQueryType;
         final var memoized = MemoizedFunction.<ParserRuleContext, LogicalOperators>memoize(
@@ -210,9 +200,20 @@ public final class QueryVisitor extends DelegatingVisitor<BaseVisitor> {
         final Identifier insertTempTableId = Identifier.of(queryName.getName() + "forInsert");
         final var initialLegInsert = LogicalOperator.newTemporaryTableInsert(initialLeg, insertTempTableId, type);
         final var recursiveLegInsert = LogicalOperator.newTemporaryTableInsert(recursiveLeg, insertTempTableId, type);
+
+        var traversalBehavior = RecursiveUnionExpression.TraversalStrategy.TraversalBehavior.noCheck();
+        if (checkClause != null) {
+            getDelegate().pushPlanFragment().addOperator(recursiveLegInsert);
+            final boolean errorOnMismatch = checkClause.ERROR() != null;
+            final Value checkValue = Assert.castUnchecked(checkClause.checkExpr.accept(this), Expression.class).getUnderlying();
+            traversalBehavior = RecursiveUnionExpression.TraversalStrategy.TraversalBehavior.check(checkValue, errorOnMismatch);
+            getDelegate().popPlanFragment();
+        }
+        final var traversalStrategy = RecursiveUnionExpression.TraversalStrategy.of(traversalOrder, traversalBehavior);
         final var recursiveUnion = new RecursiveUnionExpression(initialLegInsert.getQuantifier(), recursiveLegInsert.getQuantifier(),
                 CorrelationIdentifier.of(scanId.getName()), CorrelationIdentifier.of(insertTempTableId.getName()), traversalStrategy);
         final var quantifier = Quantifier.forEach(Reference.initialOf(recursiveUnion));
+
         var logicalOperator = LogicalOperator.newNamedOperator(queryName, Expressions.fromQuantifier(quantifier), quantifier);
         if (recursiveQueryContext.columnAliases != null) {
             final var columnAliases = visitFullIdList(recursiveQueryContext.columnAliases);

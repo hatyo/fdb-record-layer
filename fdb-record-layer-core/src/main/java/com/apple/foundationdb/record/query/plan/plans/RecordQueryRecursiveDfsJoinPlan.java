@@ -49,6 +49,7 @@ import com.apple.foundationdb.record.query.plan.cascades.expressions.RecursiveUn
 import com.apple.foundationdb.record.query.plan.cascades.expressions.RelationalExpression;
 import com.apple.foundationdb.record.query.plan.cascades.values.Value;
 import com.apple.foundationdb.record.query.plan.cascades.values.translation.TranslationMap;
+import com.apple.foundationdb.record.query.plan.serialization.PlanSerialization;
 import com.google.auto.service.AutoService;
 import com.google.common.base.Verify;
 import com.google.common.collect.ImmutableList;
@@ -124,9 +125,9 @@ public class RecordQueryRecursiveDfsJoinPlan extends AbstractRelationalExpressio
                         },
                         traversalBehavior.isNoCheck() ? null :
                             queryResult -> {
-                                final var childContext = context.withBinding(Bindings.Internal.CORRELATION.bindingName(priorValueCorrelation.getId()), queryResult);
-                                final var value = (Message)traversalBehavior.getCheckFunction().eval(store, childContext);
-                                return value == null ? null : value.toByteString().toByteArray();
+                                final var childContext = context.withBinding(Bindings.Internal.CORRELATION.bindingName(childQuantifier.getAlias().getId()), queryResult);
+                                final var value = traversalBehavior.getCheckFunction().eval(store, childContext);
+                                return value == null ? null : PlanSerialization.valueObjectToProto(value).toByteArray();
                             },
                         continuation,
                         isPreorder,
@@ -381,13 +382,12 @@ public class RecordQueryRecursiveDfsJoinPlan extends AbstractRelationalExpressio
     public static RecordQueryRecursiveDfsJoinPlan fromProto(@Nonnull final PlanSerializationContext serializationContext,
                                                             @Nonnull final PRecordQueryRecursiveDfsJoinPlan recordQueryRecursivePlanProto) {
         final boolean isPreorder = recordQueryRecursivePlanProto.getDfsTraversalStrategy().getNumber() == PDfsTraversalStrategy.PRE_ORDER_VALUE;
-        RecursiveUnionExpression.TraversalStrategy.TraversalBehavior traversalBehavior = fromProto(recordQueryRecursivePlanProto.getTraversalBehavior(), serializationContext);
         return new RecordQueryRecursiveDfsJoinPlan(
                 Quantifier.Physical.fromProto(serializationContext, Objects.requireNonNull(recordQueryRecursivePlanProto.getRootQuantifier())),
                 Quantifier.Physical.fromProto(serializationContext, Objects.requireNonNull(recordQueryRecursivePlanProto.getChildQuantifier())),
                 CorrelationIdentifier.of(Objects.requireNonNull(recordQueryRecursivePlanProto.getPriorValueCorrelation())),
                 isPreorder,
-                traversalBehavior);
+                fromProto(recordQueryRecursivePlanProto.getTraversalBehavior(), serializationContext));
     }
 
     @Nonnull

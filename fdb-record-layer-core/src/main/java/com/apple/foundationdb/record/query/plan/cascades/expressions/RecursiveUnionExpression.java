@@ -204,6 +204,11 @@ public class RecursiveUnionExpression extends AbstractRelationalExpressionWithCh
             return new TraversalStrategy(TraversalOrder.ANY, TraversalBehavior.noCheck());
         }
 
+        @Nonnull
+        public static TraversalStrategy of(@Nonnull TraversalOrder traversalOrder, @Nonnull TraversalBehavior traversalBehavior ) {
+            return new TraversalStrategy(traversalOrder, traversalBehavior);
+        }
+
         public static final class TraversalBehavior {
 
             @Nonnull
