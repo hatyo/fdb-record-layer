@@ -1464,7 +1464,7 @@ public abstract class DataType {
 
         @Override
         public String toString() {
-            return name + " { " + fields.stream().map(field -> field.getName() + ":" + field.getType()).collect(Collectors.joining(",")) + " } ";
+            return name.substring(0, Math.min(name.length(), 5)) + " { " + fields.stream().map(field -> field.getName() + ":" + field.getType()).collect(Collectors.joining(",")) + " } ";
         }
     }
 
