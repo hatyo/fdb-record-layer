@@ -36,6 +36,7 @@ import com.apple.foundationdb.record.query.plan.cascades.values.PromoteValue;
 import com.apple.foundationdb.record.query.plan.cascades.values.RecordConstructorValue;
 import com.apple.foundationdb.record.query.plan.cascades.values.Value;
 import com.apple.foundationdb.record.query.plan.cascades.values.CastValue;
+import com.apple.foundationdb.record.query.plan.cascades.values.WindowedValue;
 import com.apple.foundationdb.record.util.pair.NonnullPair;
 import com.apple.foundationdb.relational.api.exceptions.ErrorCode;
 import com.apple.foundationdb.relational.api.metadata.DataType;
@@ -55,6 +56,7 @@ import com.apple.foundationdb.relational.recordlayer.query.SemanticAnalyzer;
 import com.apple.foundationdb.relational.recordlayer.query.StringTrieNode;
 import com.apple.foundationdb.relational.recordlayer.query.TautologicalValue;
 import com.apple.foundationdb.relational.util.Assert;
+import com.google.common.base.Verify;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -646,6 +648,15 @@ public final class ExpressionVisitor extends DelegatingVisitor<BaseVisitor> {
     @Nonnull
     @Override
     public Expression visitWhereExpr(@Nonnull RelationalParser.WhereExprContext ctx) {
+        final var expression = parseChild(ctx);
+        // verify no window functions
+        Assert.thatUnchecked(expression.getUnderlyingValue().preOrderStream().noneMatch(v -> v instanceof WindowedValue),
+                ErrorCode.WINDOWING_ERROR, "window functions are not allowed in WHERE");
+        return expression;
+    }
+
+    @Override
+    public Expression visitQualifyExpr(final RelationalParser.QualifyExprContext ctx) {
         return parseChild(ctx);
     }
 
