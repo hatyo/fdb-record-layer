@@ -601,7 +601,7 @@ public final class AstNormalizer extends RelationalParserBaseVisitor<Object> {
     @Nonnull
     @VisibleForTesting
     public static NormalizationResult normalizeAst(@Nonnull final SchemaTemplate schemaTemplate,
-                                                   @Nonnull final RelationalParser.RootContext context,
+                                                   @Nonnull final ParseTree context,
                                                    @Nonnull final PreparedParams preparedStatementParameters,
                                                    int userVersion,
                                                    @Nonnull final PlannerConfiguration plannerConfiguration,
